@@ -30,6 +30,34 @@ const authProxy = createProxyMiddleware({
   },
 });
 
+const attendanceProxy = createProxyMiddleware({
+  target: process.env.ATTENDANCE_SERVICE_URL,
+  changeOrigin: true,
+
+  pathRewrite: (path, req) => req.originalUrl,
+
+  proxyTimeout: 10000,
+  timeout: 15000,
+
+  on: {
+    error: (error, req, res) => {
+      console.error(
+        "Attendance proxy failed:",
+        error.code || error.name
+      );
+
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
+
+      res.status(502).json({
+        message: "Could not reach the Attendance service.",
+      });
+    },
+  },
+});
+
 // Public routes.
 router.post("/api/auth/signup", authProxy);
 router.post("/api/auth/login", authProxy);
@@ -45,5 +73,16 @@ router.get("/api/auth/me", authenticate, (req, res) => {
 router.get("/api/users", authenticate, authProxy);
 router.post("/api/users", authenticate, authProxy);
 router.patch("/api/users/:id", authenticate, authProxy);
+
+router.get(
+  "/api/attendance/policy",
+  authenticate,
+  attendanceProxy
+);
+router.put(
+  "/api/attendance/policy",
+  authenticate,
+  attendanceProxy
+);
 
 module.exports = router;

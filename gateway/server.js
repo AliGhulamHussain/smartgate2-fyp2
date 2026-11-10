@@ -4,7 +4,11 @@ require("dotenv").config({
   path: path.resolve(__dirname, "../.env"),
 });
 
-for (const name of ["AUTH_SERVICE_URL", "FRONTEND_ORIGIN"]) {
+for (const name of [
+  "AUTH_SERVICE_URL",
+  "ATTENDANCE_SERVICE_URL",
+  "FRONTEND_ORIGIN",
+]) {
   if (!process.env[name]) {
     throw new Error(`${name} is required.`);
   }

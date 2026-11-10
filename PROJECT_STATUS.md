@@ -52,13 +52,13 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | pgvector | Verified | Extension version 0.8.6 |
 | Database role isolation | Verified | All four service roles can access only their own schemas |
 | Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
-| API Gateway | Implemented and live-tested | Auth and user-management mappings only |
+| API Gateway | Implemented and live-tested | Auth, user-management and attendance-policy mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
-| Attendance Service | Not implemented | Directory is empty; database schema exists |
+| Attendance Service | Partially implemented | Foundation, health check and organization-policy APIs completed |
 | Recognition Service | Not implemented | Directory is empty; database schema exists |
 | Alerts Service | Not implemented | Directory is empty; database schema exists |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Missing | Current verification is manual/live API testing |
+| Automated tests | Started | Three policy-validation tests plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -125,6 +125,8 @@ These counts describe the local development volume and are not fixtures.
 - `GET /api/users`
 - `POST /api/users`
 - `PATCH /api/users/:id`
+- `GET /api/attendance/policy`
+- `PUT /api/attendance/policy`
 
 Implemented Auth behavior:
 
@@ -136,6 +138,15 @@ Implemented Auth behavior:
 - Active-user and active-organization enforcement
 - Roles: `super_admin`, `org_admin`, `manager`, `gate_operator`, `viewer`
 - Organization-scoped user management
+
+Implemented Attendance behavior:
+
+- Restricted `attendance_svc` database connection
+- Independent bearer-session verification through Auth `/api/auth/me`
+- Organization-scoped policy reads and upserts
+- Policy updates restricted to `org_admin`
+- IANA timezone, time, grace-minute and ISO working-day validation
+- Attendance health endpoint with database connectivity check
 
 ## Verified Runtime Behavior
 
@@ -153,48 +164,53 @@ Verified on 2026-11-10 without creating new application data:
 - Cross-organization user access returns `403`
 - `/internal/punch` is not exposed by the gateway
 - Each database service role is denied access to the other service schemas
+- Attendance health endpoint returns `200` with database connected
+- Missing attendance policy returns `404`
+- Organization admin can create and retrieve a normalized policy through the gateway
+- Invalid timezone and malformed policy JSON return `400`
+- Viewer policy updates return `403`
+- Spoofed identity headers cannot change the policy organization
+- Temporary integration-test policy and session records are removed after testing
 
 ## Known Gaps and Risks
 
 - There is no migration system; `db/init.sql` only runs automatically for a new PostgreSQL volume.
-- `.env.example` needs gateway and future-service variables and still uses the old `smartgate` database name.
-- `FRONTEND_ORIGIN` is duplicated in the local `.env`.
 - Database service-role development passwords are embedded in `db/init.sql`.
 - Gates have no active/inactive column although the roadmap requests gate deactivation.
 - Attendance logs have no recognition-event idempotency key; duplicate camera events need an explicit strategy.
 - No internal service authentication mechanism exists for `POST /internal/punch`.
 - Redis stream names and consumer behavior are not defined.
 - Gateway proxy dependencies emit a Node.js `util._extend` deprecation warning under Node 24.
-- No automated regression tests exist.
+- Automated coverage currently covers policy validation only; full API regression tests are still needed.
+- npm reported two moderate dependency advisories for the Attendance install; the audit endpoint was unavailable, so no forced dependency changes were applied.
 
 ## Immediate Next Task
 
-Implement the Attendance Service foundation and organization-policy slice.
+Implement organization-scoped employee management in the Attendance Service.
 
 Planned endpoints:
 
-- Attendance Service `GET /health`
-- `GET /api/attendance/policy`
-- `PUT /api/attendance/policy`
+- `POST /api/attendance/employees`
+- `GET /api/attendance/employees`
+- `GET /api/attendance/employees/:id`
+- `PATCH /api/attendance/employees/:id`
 
 Requirements:
 
-- Use `ATTENDANCE_DATABASE_URL` and the restricted `attendance_svc` role.
-- Authenticate bearer tokens through Auth `/api/auth/me`.
-- Enforce organization identity in backend queries.
-- Allow authenticated organization users to view policy.
-- Allow only appropriate administrators to update policy.
-- Validate timezone, shift times, grace minutes, working days and auto-close time.
-- Upsert `attendance.org_policies` with parameterized SQL.
-- Route public requests through the API Gateway.
-- Add live endpoint and tenant-isolation checks.
-- Re-run Auth and Gateway regression checks.
+- Use the existing `attendance.employees` columns and constraints.
+- Enforce organization identity in every query.
+- Validate employee code, contact fields, department and designation.
+- Activate/deactivate employees rather than deleting history.
+- Add pagination plus practical status, presence and search filters.
+- Route all public endpoints through the API Gateway.
+- Add validation, authorization and tenant-isolation tests.
+- Re-run Auth, Gateway and policy regression checks.
 
-No schema migration is required for this slice.
+No schema migration is expected for this slice.
 
 ## Remaining Roadmap
 
-1. Attendance policy APIs
+1. Completed: Attendance Service foundation and policy APIs
 2. Employee CRUD and organization filtering
 3. Gate CRUD and gate-status schema decision
 4. Internal punch endpoint and duplicate protection
