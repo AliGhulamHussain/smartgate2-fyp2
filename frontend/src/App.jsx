@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { navigate, useRoute } from "./router";
-import { Avatar, Spinner, cx, label } from "./ui";
+import { Avatar, Logo, Spinner, cx, label } from "./ui";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Presence from "./pages/Presence";
@@ -125,9 +125,7 @@ function TopNav({ items, active }) {
         className="glass glass-strong mx-auto flex h-[60px] max-w-[1320px] items-center gap-2 rounded-full pl-3 pr-2"
       >
         <a href="#/overview" className="mr-2 flex items-center gap-2.5 rounded-full px-2 py-1" aria-label="SmartGate home">
-          <span className="flex size-8 items-center justify-center rounded-[10px] bg-accent text-accent-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
-            <ScanFace className="size-[18px]" aria-hidden />
-          </span>
+          <Logo className="size-9" />
           <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">SmartGate</span>
         </a>
 

@@ -10,7 +10,7 @@ import { navigate } from "../router";
 import {
   averageDescriptor, detectFace, drawFaceFrame, eyeAspectRatio, faceDistance, faceSnapshot, loadFaceModels, startCamera, stopCamera,
 } from "../face";
-import { Empty, Panel, Skeleton, Spinner, TONE_HEX, cx, fmtMinutes, label } from "../ui";
+import { Empty, Logo, Panel, Skeleton, Spinner, TONE_HEX, cx, fmtMinutes, label } from "../ui";
 
 export default function Kiosk({ gateId }) {
   return gateId ? <Scanner gateId={gateId} /> : <GatePicker />;
@@ -212,9 +212,7 @@ function Scanner({ gateId }) {
 
       <header className="absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-5 sm:p-8">
         <div className="glass glass-strong flex items-center gap-3 rounded-full py-2 pl-2 pr-5">
-          <span className="flex size-10 items-center justify-center rounded-full bg-accent text-accent-ink">
-            <ScanFace className="size-5" aria-hidden />
-          </span>
+          <Logo className="size-10 rounded-full" />
           <div className="leading-tight">
             <p className="text-[15px] font-semibold">{gate.data?.gate.name ?? "Gate"}</p>
             <p className="text-xs text-fg-3">{gate.data ? (gate.data.gate.direction === "both" ? "Entry and exit" : `${label(gate.data.gate.direction)} only`) : " "}</p>

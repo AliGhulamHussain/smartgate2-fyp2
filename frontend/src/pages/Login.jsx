@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ArrowRight, ScanFace } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useAuth } from "../auth";
-import { Button, ErrorNote, Field, Input, Panel, Segmented } from "../ui";
+import { Button, ErrorNote, Field, Input, Logo, Panel, Segmented } from "../ui";
 
 const slugify = (text) =>
   text.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
@@ -40,9 +40,7 @@ export default function Login() {
     <main className="relative z-10 grid min-h-dvh w-full max-w-full overflow-x-hidden lg:grid-cols-[1.15fr_1fr]">
       <section className="flex flex-col justify-between px-6 py-10 sm:px-12 lg:px-16 lg:py-14">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-[11px] bg-accent text-accent-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
-            <ScanFace className="size-5" aria-hidden />
-          </span>
+          <Logo className="size-11" />
           <span className="text-lg font-semibold tracking-tight">SmartGate</span>
         </div>
 

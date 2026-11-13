@@ -35,6 +35,22 @@ export const STATUS_TONE = {
 export const label = (value) =>
   String(value ?? "").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
+// The SmartGate mark (frontend/public/SmartGate-logo.png, served as a
+// square 256px copy). Decorative by default; pass alt when it stands alone.
+export function Logo({ className, alt = "" }) {
+  return (
+    <img
+      src="/logo-256.png"
+      alt={alt}
+      aria-hidden={alt ? undefined : true}
+      width={256}
+      height={256}
+      draggable={false}
+      className={cx("shrink-0 rounded-[28%] ring-1 ring-inset ring-white/10 shadow-[0_6px_20px_-8px_rgb(124_240_197/0.45)]", className)}
+    />
+  );
+}
+
 export function Panel({ as: Tag = "section", className, children, ...props }) {
   return (
     <Tag className={cx("glass rounded-[28px]", className)} {...props}>
