@@ -8,6 +8,7 @@ for (const name of [
   "AUTH_SERVICE_URL",
   "ATTENDANCE_SERVICE_URL",
   "RECOGNITION_SERVICE_URL",
+  "ALERTS_SERVICE_URL",
   "FRONTEND_ORIGIN",
 ]) {
   if (!process.env[name]) {

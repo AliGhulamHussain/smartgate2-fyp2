@@ -16,6 +16,7 @@ const {
   decideMatch,
   callAttendance,
 } = require("../utils");
+const { publishUnknownFace } = require("../events");
 
 const router = express.Router();
 
@@ -64,10 +65,11 @@ router.post(
 
     const decision = decideMatch(candidates.rows, settings.match_threshold, MATCH_MARGIN);
 
-    await pool.query(
+    const eventResult = await pool.query(
       `INSERT INTO recognition.recognition_events
          (organization_id, employee_id, gate_id, distance, matched)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, created_at`,
       [
         organizationId,
         decision.matched ? decision.employee_id : null,
@@ -78,10 +80,23 @@ router.post(
     );
 
     if (!decision.matched) {
+      // Unknown face: hand the snapshot to the Alerts Service.
+      const alertQueued =
+        input.snapshot !== null &&
+        (await publishUnknownFace({
+          organization_id: organizationId,
+          gate_id: input.gate_id,
+          best_distance: decision.distance ?? null,
+          recognition_event_id: eventResult.rows[0].id,
+          captured_at: eventResult.rows[0].created_at.toISOString(),
+          snapshot: input.snapshot,
+        }));
+
       return res.json({
         matched: false,
         reason: decision.reason,
         distance: decision.distance ?? null,
+        alert_queued: alertQueued,
       });
     }
 

@@ -36,7 +36,7 @@ Deferred:
 | Auth Service | Windows, `127.0.0.1:4001` | Organizations, users, JWTs, refresh sessions and RBAC |
 | Attendance Service | Windows, `127.0.0.1:4002` | Policies, employees, gates, attendance and presence |
 | Recognition Service | Windows, `127.0.0.1:4003` | Face enrollment, matching and recognition events |
-| Alerts Service | Planned | Unknown faces, notifications and event consumption |
+| Alerts Service | Windows, `127.0.0.1:4004` | Unknown faces, notifications, audit logs and Redis Stream consumption |
 | PostgreSQL + pgvector | Docker, host port `5433` | Persistent service-specific schemas |
 | Redis | Docker, host port `6379` | Redis Streams and asynchronous events |
 | React frontend | Planned, expected port `5173` | Dashboard and gate kiosk |
@@ -51,14 +51,14 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | PostgreSQL | Verified | Database `smartgate2`, PostgreSQL 16.15 |
 | pgvector | Verified | Extension version 0.8.6 |
 | Database role isolation | Verified | All four service roles can access only their own schemas |
-| Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
-| API Gateway | Implemented and live-tested | Auth, user-management, Attendance and Recognition mappings |
+| Redis | In use | Stream `smartgate:unknown-faces` with consumer group `alerts-service`; per-gate cooldown keys |
+| API Gateway | Implemented and live-tested | Auth, user-management, Attendance, Recognition and Alerts mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
 | Attendance Service | Implemented and live-tested | Policy, employee, gate, punch processing and monitoring APIs |
 | Recognition Service | Implemented and live-tested | Enrollment, identification with pgvector, settings, Attendance punch integration |
-| Alerts Service | Not implemented | Directory is empty; database schema exists |
+| Alerts Service | Implemented and live-tested | Unknown-face alerts with snapshots, recipients, queued notifications, audit log |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Started | 18 Attendance and 5 Recognition unit tests plus live integration checks |
+| Automated tests | Started | 18 Attendance, 6 Recognition and 5 Alerts unit tests plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -155,6 +155,15 @@ These counts describe the local development volume and are not fixtures.
 - `POST /api/recognition/identify`
 - `GET /api/recognition/settings`
 - `PUT /api/recognition/settings`
+- `GET /api/alerts/unknown-faces`
+- `GET /api/alerts/unknown-faces/:id`
+- `GET /api/alerts/unknown-faces/:id/snapshot`
+- `PATCH /api/alerts/unknown-faces/:id`
+- `GET /api/alerts/recipients`
+- `POST /api/alerts/recipients`
+- `DELETE /api/alerts/recipients/:id`
+- `GET /api/alerts/notifications`
+- `GET /api/alerts/audit-logs`
 
 Implemented Auth behavior:
 
@@ -216,6 +225,18 @@ Implemented Recognition behavior:
 - Matching uses pgvector L2 distance (`<->`), nearest sample per employee within the organization; a match needs distance <= `match_threshold` (default 0.5) and the best person must beat the second-best by `RECOGNITION_MATCH_MARGIN` (default 0.05), otherwise `ambiguous`
 - Every identify attempt is stored in `recognition.recognition_events`; a match calls Attendance `POST /internal/punch` with confidence `1 - distance` and returns the employee and attendance result to the kiosk
 - Settings: `match_threshold` 0.2-0.8 and `liveness_required`; created with database defaults on first read
+- Identify accepts an optional `snapshot` (base64 JPEG, max 200 KB, checked by its FF D8 FF header). On a non-match with a snapshot, Recognition adds an event to the Redis Stream `smartgate:unknown-faces` and returns `alert_queued`; one alert per gate per `UNKNOWN_FACE_COOLDOWN_SECONDS` (default 30). Matched snapshots are discarded. Redis being down never fails identification
+
+Implemented Alerts behavior:
+
+- Consumer group `alerts-service` reads the stream, validates each event, writes the JPEG to `ALERTS_SNAPSHOT_DIR` (default `services/alerts-service/snapshots/`, git-ignored) and stores only the relative path in `alerts.unknown_faces`
+- The alert id is derived from the stream message id, so reprocessing cannot duplicate an alert
+- Each new alert queues one `alerts.notifications` row per recipient subscribed to `unknown_face`
+- Malformed events are logged and acknowledged; other failures stay pending and are retried at the next start
+- Unknown faces: `org_admin`, `manager` and `gate_operator` can list, open and view snapshots (viewers cannot); `org_admin` and `manager` review with `status` `new`/`reviewed`/`dismissed` and an optional note, recording reviewer and time. Lists include per-status counts and filter by `status` and `gate_id`
+- Snapshots are served only through the API with the bearer token; stored paths are confined to the snapshot directory
+- Recipients (`org_admin`): email plus subscribed `alert_types`; duplicates `409`
+- Notification log and audit log (`org_admin`); reviews and recipient changes are audited with the acting user
 
 ## Verified Runtime Behavior
 
@@ -297,6 +318,19 @@ Recognition verified on 2026-11-13 through the gateway (44 live checks, all pass
 - Internal Attendance endpoint needs the key and is not exposed by the gateway; a client-sent `X-Internal-Key` is stripped by the gateway
 - Employee, gate, punch and monitoring suites re-run and passed; all temporary data removed and every table returned to baseline; `recognition_svc` still cannot read the Attendance schema
 
+Unknown-face flow and Alerts verified on 2026-11-13 through the gateway (45 live checks, all passed; Recognition started with `UNKNOWN_FACE_COOLDOWN_SECONDS=3`):
+
+- Recipients: admin-only, email normalized, duplicate `409`, invalid `400`, delete, cross-organization delete `404`
+- A stranger with a snapshot queues an alert; same-gate cooldown, another gate, after cooldown; a known face and a request without a snapshot create no alert; a non-JPEG snapshot returns `400`
+- Alerts appear through the stream with correct fields; the snapshot is returned byte-for-byte as `image/jpeg`; no file path leaks
+- Notifications are queued only for recipients subscribed to `unknown_face` and link the alert
+- Role checks: viewers cannot see alerts or snapshots, gate operators can read but not review, managers review, managers cannot read notifications or audit logs
+- Review, reopen (clears reviewer) and dismiss; status counts and filters; audit trail with actors
+- Organization B cannot list, open, view or review Organization A alerts; a stored path outside the snapshot folder returns `404`
+- A malformed stream message is acknowledged and dropped, and the consumer keeps processing
+- All other live suites re-run and passed (Auth's in-memory signup rate limit returned `429` when every suite ran back to back; restarting Auth reset it)
+- All temporary rows, snapshot files, Redis cooldown keys and stream entries removed; every table returned to baseline
+
 ## Known Gaps and Risks
 
 - There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
@@ -307,7 +341,11 @@ Recognition verified on 2026-11-13 through the gateway (44 live checks, all pass
 - `presence` is not paginated (fine for hundreds of people inside at once).
 - The server trusts descriptors and the liveness flag sent by an authenticated kiosk; a blink check stops printed photos but not video replay or a modified client.
 - Identification scans every sample in the organization (fine for thousands of samples); add the HNSW index and a nearest-sample search for much larger organizations.
-- Unknown faces are recorded only as unmatched `recognition_events`; snapshots and alerts arrive with the Alerts slice.
+- Notifications are only queued; no email is sent until an SMTP sender is added. Only `unknown_face` notifications are produced; `late_arrival`, `forgot_checkout` and `daily_summary` types exist for later.
+- Audit logs cover Alerts actions only; policy, employee and gate changes in other services are not yet audited.
+- Snapshots are kept forever on local disk (no retention cleanup); in Docker they need a volume.
+- Failed stream events are retried only when the Alerts Service restarts and are never dead-lettered.
+- Auth's signup rate limit is per process and in memory; integration runs that create many organizations must space themselves out or restart Auth.
 - The 0.5 threshold and 0.05 margin are starting values and must be tuned with real cameras during demo testing.
 - Holidays have no API yet; rows can only be added directly in the database.
 - `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
@@ -318,13 +356,14 @@ Recognition verified on 2026-11-13 through the gateway (44 live checks, all pass
 
 ## Immediate Next Task
 
-Unknown-face flow and the Alerts Service (`services/alerts-service`, planned port `4004`):
+React dashboard and gate kiosk in `frontend/` (Vite, React JSX, Tailwind CSS, Lucide React, Recharts, native `fetch()`), port `5173`, all traffic through the gateway:
 
-- Decide snapshot handling: the kiosk uploads a small JPEG of an unmatched face; store it on a Docker volume or local folder (never base64 in the database) and keep only `snapshot_path`
-- Recognition publishes an unknown-face event to a Redis Stream (define stream name, consumer group, retry and deduplication)
-- Alerts consumes the stream into `alerts.unknown_faces` and `alerts.notifications`
-- Public APIs to list unknown faces, view a snapshot, and mark them reviewed/dismissed
-- Organization isolation, role checks, gateway routes, unit and live tests
+- Login with access token in memory and refresh-cookie rotation
+- Dashboard from `/api/attendance/stats` and `/presence` with a 7-day Recharts trend
+- Employees, gates, policy, users, daily attendance and logs screens
+- Face enrollment screen using `@vladmandic/face-api` (3-5 samples per employee)
+- Gate kiosk: webcam, face-api descriptor, 2-3 consecutive matching frames, blink liveness check, snapshot on unknown faces, result display
+- Unknown-face review screen with snapshots, recipients and audit log
 
 ## Schema and Migration History
 
@@ -342,7 +381,7 @@ Unknown-face flow and the Alerts Service (`services/alerts-service`, planned por
 5. Completed: Check-in/check-out, lateness, presence and daily summaries
 6. Completed: Attendance monitoring and statistics APIs
 7. Completed: Recognition Service and embedding registration/matching
-8. Unknown-face event flow and Alerts Service
+8. Completed: Unknown-face event flow and Alerts Service
 9. React dashboard and kiosk
 10. End-to-end multi-tenant testing
 11. Demo data, diagrams, API documentation, report and presentation

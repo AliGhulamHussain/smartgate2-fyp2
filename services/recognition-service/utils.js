@@ -60,10 +60,36 @@ function readEnrollment(body) {
   return descriptors.map((d, i) => readDescriptor(d, `descriptors[${i}]`));
 }
 
-// Identify body from the kiosk: { gate_id, descriptor, liveness_passed? }.
-// liveness_passed is the kiosk's blink-check result.
+const MAX_SNAPSHOT_BYTES = 200 * 1024;
+
+// Optional JPEG of the face, as base64 or a "data:image/jpeg;base64," URL.
+// Returns plain base64 (it travels to the Alerts Service in a Redis Stream).
+function readSnapshot(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const base64 =
+    typeof value === "string" ? value.replace(/^data:image\/jpeg;base64,/, "") : "";
+  const bytes =
+    /^[A-Za-z0-9+/]+={0,2}$/.test(base64) ? Buffer.from(base64, "base64") : Buffer.alloc(0);
+
+  // Every JPEG file starts with the bytes FF D8 FF.
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
+    fail(400, "snapshot must be a base64 JPEG image.");
+  }
+  if (bytes.length > MAX_SNAPSHOT_BYTES) {
+    fail(400, "snapshot must be at most 200 KB.");
+  }
+
+  return base64;
+}
+
+// Identify body from the kiosk: { gate_id, descriptor, liveness_passed?, snapshot? }.
+// liveness_passed is the kiosk's blink-check result. snapshot is only kept
+// when nobody matches (unknown-face alert).
 function readIdentify(body) {
-  const allowed = ["gate_id", "descriptor", "liveness_passed"];
+  const allowed = ["gate_id", "descriptor", "liveness_passed", "snapshot"];
 
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     fail(400, "Request body must be a JSON object.");
@@ -87,6 +113,7 @@ function readIdentify(body) {
     gate_id: body.gate_id,
     descriptor: readDescriptor(body.descriptor),
     liveness_passed: body.liveness_passed === true,
+    snapshot: readSnapshot(body.snapshot),
   };
 }
 

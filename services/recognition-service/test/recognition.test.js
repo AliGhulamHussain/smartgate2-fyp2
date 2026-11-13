@@ -31,6 +31,18 @@ test("readIdentify validates gate, descriptor and liveness flag", () => {
   assert.throws(() => readIdentify({ gate_id: GATE, descriptor: sample(), employee_id: GATE }), is400);
 });
 
+test("readIdentify accepts an optional JPEG snapshot only", () => {
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 7, 0xff, 0xd9]).toString("base64");
+  const base = { gate_id: GATE, descriptor: sample() };
+  assert.equal(readIdentify(base).snapshot, null);
+  assert.equal(readIdentify({ ...base, snapshot: jpeg }).snapshot, jpeg);
+  assert.equal(readIdentify({ ...base, snapshot: `data:image/jpeg;base64,${jpeg}` }).snapshot, jpeg);
+  assert.throws(() => readIdentify({ ...base, snapshot: Buffer.from("\x89PNG").toString("base64") }), is400);
+  assert.throws(() => readIdentify({ ...base, snapshot: "%%%" }), is400);
+  const huge = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(201 * 1024)]).toString("base64");
+  assert.throws(() => readIdentify({ ...base, snapshot: huge }), is400);
+});
+
 test("readSettings bounds the threshold", () => {
   assert.deepEqual(readSettings({ match_threshold: 0.45, liveness_required: false }), {
     match_threshold: 0.45,

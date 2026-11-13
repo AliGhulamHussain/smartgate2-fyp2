@@ -23,6 +23,7 @@ if (process.env.INTERNAL_SERVICE_KEY.length < 32) {
 const express = require("express");
 const cors = require("cors");
 const { pool } = require("./db");
+const { connectRedis, closeRedis } = require("./events");
 const { asyncHandler } = require("./utils");
 const faceRoutes = require("./routes/faces");
 const identifyRoutes = require("./routes/identify");
@@ -49,8 +50,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Up to 10 descriptors of 128 numbers fit comfortably in 64kb.
-app.use(express.json({ limit: "64kb" }));
+// Enrollment descriptors and a 200 KB base64 snapshot fit in 512kb.
+app.use(express.json({ limit: "512kb" }));
 
 app.use((req, res, next) => {
   res.set("Cache-Control", "no-store");
@@ -100,6 +101,7 @@ app.use((error, req, res, next) => {
 
 async function start() {
   await pool.query("SELECT 1");
+  connectRedis();
 
   const port = Number(process.env.RECOGNITION_PORT || 4003);
   const host = process.env.RECOGNITION_HOST || "127.0.0.1";
@@ -110,6 +112,7 @@ async function start() {
 
   function shutdown() {
     server.close(async () => {
+      closeRedis();
       await pool.end();
       process.exit(0);
     });

@@ -86,6 +86,31 @@ const recognitionProxy = createProxyMiddleware({
   },
 });
 
+const alertsProxy = createProxyMiddleware({
+  target: process.env.ALERTS_SERVICE_URL,
+  changeOrigin: true,
+
+  pathRewrite: (path, req) => req.originalUrl,
+
+  proxyTimeout: 10000,
+  timeout: 15000,
+
+  on: {
+    error: (error, req, res) => {
+      console.error("Alerts proxy failed:", error.code || error.name);
+
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
+
+      res.status(502).json({
+        message: "Could not reach the Alerts service.",
+      });
+    },
+  },
+});
+
 // Public routes.
 router.post("/api/auth/signup", authProxy);
 router.post("/api/auth/login", authProxy);
@@ -137,5 +162,16 @@ router.delete("/api/recognition/employees/:id/faces", authenticate, recognitionP
 router.post("/api/recognition/identify", authenticate, recognitionProxy);
 router.get("/api/recognition/settings", authenticate, recognitionProxy);
 router.put("/api/recognition/settings", authenticate, recognitionProxy);
+
+// Alerts also checks roles and organization access.
+router.get("/api/alerts/unknown-faces", authenticate, alertsProxy);
+router.get("/api/alerts/unknown-faces/:id", authenticate, alertsProxy);
+router.get("/api/alerts/unknown-faces/:id/snapshot", authenticate, alertsProxy);
+router.patch("/api/alerts/unknown-faces/:id", authenticate, alertsProxy);
+router.get("/api/alerts/recipients", authenticate, alertsProxy);
+router.post("/api/alerts/recipients", authenticate, alertsProxy);
+router.delete("/api/alerts/recipients/:id", authenticate, alertsProxy);
+router.get("/api/alerts/notifications", authenticate, alertsProxy);
+router.get("/api/alerts/audit-logs", authenticate, alertsProxy);
 
 module.exports = router;
