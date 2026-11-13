@@ -85,4 +85,10 @@ router.put(
   attendanceProxy
 );
 
+// Attendance also checks roles and organization access.
+router.get("/api/attendance/employees", authenticate, attendanceProxy);
+router.post("/api/attendance/employees", authenticate, attendanceProxy);
+router.get("/api/attendance/employees/:id", authenticate, attendanceProxy);
+router.patch("/api/attendance/employees/:id", authenticate, attendanceProxy);
+
 module.exports = router;

@@ -19,6 +19,7 @@ const cors = require("cors");
 const { pool } = require("./db");
 const { asyncHandler } = require("./utils");
 const policyRoutes = require("./routes/policy");
+const employeeRoutes = require("./routes/employees");
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.get(
 );
 
 app.use("/api/attendance/policy", policyRoutes);
+app.use("/api/attendance/employees", employeeRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });

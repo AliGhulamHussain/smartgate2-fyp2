@@ -1,6 +1,6 @@
 # SmartGate FYP-2 Project Status
 
-Last updated: 2026-11-10
+Last updated: 2026-11-13
 
 This is the living development handoff for SmartGate. Update it after every meaningful feature, schema change, API change, integration test, or newly discovered blocker.
 
@@ -34,7 +34,7 @@ Deferred:
 |---|---|---|
 | API Gateway | Windows, `127.0.0.1:4000` | Public frontend entry point and service routing |
 | Auth Service | Windows, `127.0.0.1:4001` | Organizations, users, JWTs, refresh sessions and RBAC |
-| Attendance Service | Planned, port `4002` | Policies, employees, gates, attendance and presence |
+| Attendance Service | Windows, `127.0.0.1:4002` | Policies, employees, gates, attendance and presence |
 | Recognition Service | Planned | Embeddings, matching and recognition events |
 | Alerts Service | Planned | Unknown faces, notifications and event consumption |
 | PostgreSQL + pgvector | Docker, host port `5433` | Persistent service-specific schemas |
@@ -52,13 +52,13 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | pgvector | Verified | Extension version 0.8.6 |
 | Database role isolation | Verified | All four service roles can access only their own schemas |
 | Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
-| API Gateway | Implemented and live-tested | Auth, user-management and attendance-policy mappings |
+| API Gateway | Implemented and live-tested | Auth, user-management, attendance-policy and employee mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
-| Attendance Service | Partially implemented | Foundation, health check and organization-policy APIs completed |
+| Attendance Service | Partially implemented | Foundation, health check, policy and employee-management APIs completed |
 | Recognition Service | Not implemented | Directory is empty; database schema exists |
 | Alerts Service | Not implemented | Directory is empty; database schema exists |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Started | Three policy-validation tests plus live integration checks |
+| Automated tests | Started | Eight unit tests (policy and employee validation) plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -127,6 +127,10 @@ These counts describe the local development volume and are not fixtures.
 - `PATCH /api/users/:id`
 - `GET /api/attendance/policy`
 - `PUT /api/attendance/policy`
+- `GET /api/attendance/employees`
+- `POST /api/attendance/employees`
+- `GET /api/attendance/employees/:id`
+- `PATCH /api/attendance/employees/:id`
 
 Implemented Auth behavior:
 
@@ -147,6 +151,13 @@ Implemented Attendance behavior:
 - Policy updates restricted to `org_admin`
 - IANA timezone, time, grace-minute and ISO working-day validation
 - Attendance health endpoint with database connectivity check
+- Organization-scoped employee create/list/get/update; every query filters by the caller's `organization_id`
+- All organization roles may read employees; only `org_admin` may create or update
+- Employee fields: `employee_code` (letters, digits, `.`, `_`, `-`), `full_name`, optional `email`, `phone`, `department`, `designation`; unsupported fields are rejected
+- `presence` and `face_enrolled` cannot be set through CRUD (owned by punch processing and Recognition)
+- Deactivation and reactivation through `PATCH` with `status`; employees are never deleted
+- Duplicate `employee_code` within an organization returns `409`
+- List supports `page`, `limit` (default 20, max 100), `search` (name or code), `status`, `presence` and `department`
 
 ## Verified Runtime Behavior
 
@@ -172,6 +183,19 @@ Verified on 2026-11-10 without creating new application data:
 - Spoofed identity headers cannot change the policy organization
 - Temporary integration-test policy and session records are removed after testing
 
+Employee management verified on 2026-11-13 through the gateway (50 live checks, all passed):
+
+- Create, list, get and update return the expected data; new employees keep the active/outside/not-enrolled defaults
+- Deactivate and reactivate work, and the status filter reflects them
+- Duplicate `employee_code` returns `409` on create and update; the same code is allowed in another organization
+- Invalid UUIDs, unsupported fields, `presence`/`face_enrolled`, malformed JSON and bad filters return `400`
+- Missing token returns `401`; viewer writes return `403`; viewers can read
+- Organization B gets `404` when reading or updating an Organization A employee, and the update is not applied
+- Spoofed identity headers cannot change tenant scope or role
+- Search, department, presence, status filters and pagination behave correctly; LIKE wildcards in search are literal
+- Auth, policy, origin, logout and `/internal/punch` regression checks still pass
+- Temporary organizations, users, sessions, policy and employees were removed; counts returned to 3 organizations, 4 users, 10 refresh tokens, 0 policies, 0 employees
+
 ## Known Gaps and Risks
 
 - There is no migration system; `db/init.sql` only runs automatically for a new PostgreSQL volume.
@@ -181,37 +205,21 @@ Verified on 2026-11-10 without creating new application data:
 - No internal service authentication mechanism exists for `POST /internal/punch`.
 - Redis stream names and consumer behavior are not defined.
 - Gateway proxy dependencies emit a Node.js `util._extend` deprecation warning under Node 24.
-- Automated coverage currently covers policy validation only; full API regression tests are still needed.
+- Automated unit coverage covers policy and employee validation only; live integration checks are run manually and are not yet a committed test suite.
 - npm reported two moderate dependency advisories for the Attendance install; the audit endpoint was unavailable, so no forced dependency changes were applied.
 
 ## Immediate Next Task
 
-Implement organization-scoped employee management in the Attendance Service.
+Implement organization-scoped gate management in the Attendance Service.
 
-Planned endpoints:
-
-- `POST /api/attendance/employees`
-- `GET /api/attendance/employees`
-- `GET /api/attendance/employees/:id`
-- `PATCH /api/attendance/employees/:id`
-
-Requirements:
-
-- Use the existing `attendance.employees` columns and constraints.
-- Enforce organization identity in every query.
-- Validate employee code, contact fields, department and designation.
-- Activate/deactivate employees rather than deleting history.
-- Add pagination plus practical status, presence and search filters.
-- Route all public endpoints through the API Gateway.
-- Add validation, authorization and tenant-isolation tests.
-- Re-run Auth, Gateway and policy regression checks.
-
-No schema migration is expected for this slice.
+- Decide whether gates need an `is_active`/status column. If yes, add an explicit, repeatable migration file; do not add the column only in code or only in `db/init.sql`.
+- Planned endpoints: `POST`, `GET`, `GET /:id`, `PATCH /:id` under `/api/attendance/gates`
+- Same rules as employees: organization from the authenticated user, `org_admin` writes, all organization roles read, `409` for duplicate gate names, gateway routes, unit and live tests.
 
 ## Remaining Roadmap
 
 1. Completed: Attendance Service foundation and policy APIs
-2. Employee CRUD and organization filtering
+2. Completed: Employee CRUD and organization filtering
 3. Gate CRUD and gate-status schema decision
 4. Internal punch endpoint and duplicate protection
 5. Check-in/check-out, lateness, presence and daily summaries
