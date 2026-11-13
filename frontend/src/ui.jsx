@@ -1,5 +1,5 @@
 // Shared UI primitives for the liquid-glass design system.
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import { Component, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 
 export const cx = (...classes) => classes.filter(Boolean).join(" ");
@@ -355,6 +355,35 @@ export function Avatar({ name, className }) {
       {initials}
     </span>
   );
+}
+
+/* Error boundary: a failed render or lazy chunk shows a recoverable
+   message instead of a blank page. */
+export class ErrorBoundary extends Component {
+  state = { error: null };
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    console.error("Screen failed:", error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <Panel className="reveal mx-auto my-10 max-w-lg">
+        <Empty
+          icon={AlertTriangle}
+          title="This screen could not load"
+          action={<Button variant="primary" onClick={() => window.location.reload()}>Reload</Button>}
+        >
+          Usually this means the app was updated in the background. Reloading fixes it.
+        </Empty>
+      </Panel>
+    );
+  }
 }
 
 /* Toasts */

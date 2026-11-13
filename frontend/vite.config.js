@@ -7,6 +7,12 @@ import tailwindcss from "@tailwindcss/vite";
 // sees the allowed http://localhost:5173 origin.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // face-api is only imported by lazily loaded screens (kiosk, enrollment).
+  // Pre-bundling it at startup stops Vite from re-optimizing mid-session,
+  // which invalidates open pages ("Outdated Optimize Dep").
+  optimizeDeps: {
+    include: ["@vladmandic/face-api"],
+  },
   server: {
     host: "localhost",
     port: 5173,

@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { navigate, useRoute } from "./router";
-import { Avatar, Logo, Spinner, cx, label } from "./ui";
+import { Avatar, ErrorBoundary, Logo, Spinner, cx, label } from "./ui";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Presence from "./pages/Presence";
@@ -66,9 +66,11 @@ export default function App() {
     return (
       <>
         <Background />
-        <Suspense fallback={<div className="relative z-10 grid min-h-dvh place-items-center"><Spinner className="size-6" /></div>}>
-          <Kiosk gateId={rest[0]} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="relative z-10 grid min-h-dvh place-items-center"><Spinner className="size-6" /></div>}>
+            <Kiosk gateId={rest[0]} />
+          </Suspense>
+        </ErrorBoundary>
       </>
     );
   }
@@ -83,7 +85,9 @@ export default function App() {
       <main className="relative z-10 w-full max-w-full overflow-x-hidden">
         <TopNav items={allowed} active={active.id} />
         <div className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-28 sm:px-6 lg:px-10">
-          <Page key={active.id} />
+          <ErrorBoundary key={active.id}>
+            <Page />
+          </ErrorBoundary>
         </div>
       </main>
     </>
