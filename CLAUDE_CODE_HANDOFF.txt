@@ -1,0 +1,686 @@
+SMARTGATE FYP-2 — COMPLETE CLAUDE CODE HANDOFF
+================================================
+
+Last prepared: 2026-11-13
+
+You are taking over development of an existing Final Year Project named
+SmartGate. This is not a new project. Do not restart it, replace its
+architecture, or rewrite working services. Inspect the repository and preserve
+completed work.
+
+
+1. PROJECT LOCATION AND GIT
+---------------------------
+
+Local project:
+D:\ClassProjects\FYP2-8TH-SEMESTER\smartgate-platform
+
+GitHub repository:
+https://github.com/AliGhulamHussain/smartgate2-fyp2
+
+Branch: main
+
+Required commit identity:
+Name: AliGhulamHussain
+Email: bsahab4455@gmail.com
+
+Do not add Claude, Codex, AI, or co-author attribution to commits. Never
+force-push, reset, or discard existing work.
+
+Known commits:
+
+- 665173543e52b128eb6eff114d72dc023eb07aea
+  chore: establish SmartGate project baseline
+
+- f93c1481fefd638ce103616c0d9759086adfce6f
+  feat: add attendance policy service
+
+Verify whether the second commit is already on origin/main:
+
+git status --short --branch
+git log --oneline --decorate -5
+git remote -v
+git fetch origin
+git log --oneline origin/main..main
+
+If f93c148 is ahead of origin/main, use a normal git push. Never use --force.
+
+Read PROJECT_STATUS.md before making changes. It is the living development
+status file. Update it after every meaningful feature, migration, API change,
+integration test, or newly discovered blocker.
+
+
+2. PROJECT PURPOSE AND MVP
+--------------------------
+
+SmartGate is a multi-tenant, face-recognition-based attendance and access
+monitoring platform for schools, universities, offices, and similar
+organizations.
+
+MVP features:
+
+- Organization registration and tenant isolation
+- Role-based organization users
+- One attendance policy/shift per organization
+- Employee management
+- Gate/location management
+- Face enrollment using 128-dimensional embeddings
+- Employee recognition
+- Automatic check-in/check-out
+- Late-arrival calculation
+- Current presence monitoring
+- Daily attendance summaries
+- Unknown-face records and alerts
+- React administration dashboard and gate kiosk
+
+Deferred from the MVP:
+
+- Multiple shifts
+- Payroll
+- Complex leave management
+- Manual attendance overrides
+- Advanced schedules and exports
+
+Do not expand scope unnecessarily.
+
+
+3. REQUIRED TECHNOLOGY STACK
+----------------------------
+
+Backend:
+
+- Node.js and Express.js
+- JavaScript and CommonJS (require/module.exports)
+- REST APIs and native fetch()
+- JWT authentication
+- PostgreSQL through pg
+- Parameterized SQL
+
+Frontend, when reached:
+
+- React JSX, not TypeScript
+- Tailwind CSS
+- Lucide React icons
+- Recharts
+- Native fetch(), not Axios
+
+Infrastructure:
+
+- PostgreSQL 16
+- pgvector
+- Redis and Redis Streams
+- Docker and Docker Compose
+- Windows 11 / PowerShell / Docker Desktop
+
+Do not add controllers, ORMs, TypeScript, Axios, or unnecessary frameworks.
+Code should remain understandable to undergraduate computer science students.
+
+
+4. ARCHITECTURE
+---------------
+
+Frontend (planned, port 5173)
+    -> API Gateway (127.0.0.1:4000)
+        -> Auth Service (127.0.0.1:4001)
+        -> Attendance Service (127.0.0.1:4002)
+        -> Recognition Service (planned)
+        -> Alerts Service (planned)
+    -> PostgreSQL/pgvector (Docker host port 5433)
+    -> Redis (Docker host port 6379)
+
+Normal frontend requests must go through the API Gateway. Internal endpoints,
+especially POST /internal/punch, must not be exposed by the gateway.
+
+Each service has its own restricted PostgreSQL account and schema. A service
+must not query another service's schema. Use REST for synchronous communication
+and Redis Streams only for appropriate asynchronous workflows.
+
+Recognition must not write Attendance tables. After a successful match, it must
+call the Attendance Service's internal POST /internal/punch endpoint.
+
+
+5. CURRENT PROJECT STRUCTURE
+----------------------------
+
+db/
+  init.sql
+
+gateway/
+  middleware/auth.js
+  routes/api.js
+  package.json
+  package-lock.json
+  server.js
+
+services/auth-service/
+  middleware/auth.js
+  routes/auth.js
+  routes/users.js
+  db.js
+  utils.js
+  package.json
+  package-lock.json
+  server.js
+
+services/attendance-service/
+  middleware/auth.js
+  routes/policy.js
+  test/policy.test.js
+  db.js
+  utils.js
+  package.json
+  package-lock.json
+  server.js
+
+services/recognition-service/    empty
+services/alerts-service/         empty
+frontend/                        empty
+
+docker-compose.yml
+.env                             local, secret and ignored
+.env.example
+.gitignore
+PROJECT_STATUS.md
+CLAUDE_CODE_HANDOFF.txt
+
+
+6. VERIFIED INFRASTRUCTURE
+--------------------------
+
+Docker Compose defines PostgreSQL and Redis only. Node services run directly
+on Windows during development.
+
+Live verification completed on 2026-11-10:
+
+- PostgreSQL host port: 5433
+- Database: smartgate2
+- PostgreSQL version: 16.15
+- pgvector version: 0.8.6
+- Redis host port: 6379
+- Redis version: 7.4.11
+- Redis PING returned PONG
+- Redis had zero keys and no streams
+- All four service schemas existed
+- All 16 expected tables existed
+- Required indexes and constraints existed
+- PostgreSQL data survived Docker restart
+
+Data snapshot at that time:
+
+- Organizations: 3
+- Users: 4
+- Refresh-token records: 10
+- Active org-admin sessions: 1
+- Attendance policies: 0
+- Employees: 0
+- Gates: 0
+- Attendance logs: 0
+- Recognition rows: 0
+- Alerts/notifications: 0
+
+These counts are local development state, not fixtures. Recheck them before
+relying on them.
+
+
+7. DATABASE SOURCE OF TRUTH
+---------------------------
+
+Read db/init.sql before database work. The real table names below override
+shortened names from older planning documents.
+
+Auth schema:
+
+- auth.organizations
+- auth.users
+- auth.refresh_tokens
+
+Attendance schema:
+
+- attendance.org_policies
+- attendance.holidays
+- attendance.gates
+- attendance.employees
+- attendance.attendance_logs
+- attendance.daily_attendance
+
+Recognition schema:
+
+- recognition.face_embeddings
+- recognition.org_settings
+- recognition.recognition_events
+
+Alerts schema:
+
+- alerts.unknown_faces
+- alerts.notification_recipients
+- alerts.notifications
+- alerts.audit_logs
+
+Restricted service roles:
+
+- auth_svc
+- attendance_svc
+- recognition_svc
+- alerts_svc
+
+Live isolation tests confirmed each role can access its own schema and receives
+permission denied for another service's schema. None is a superuser or can
+create roles/databases.
+
+Important Attendance table details:
+
+attendance.org_policies:
+
+- organization_id UUID primary key
+- timezone VARCHAR(50), default Asia/Karachi
+- work_start TIME, default 09:00
+- work_end TIME, default 17:00
+- grace_minutes INT, default 10
+- working_days SMALLINT[], ISO weekdays
+- auto_close_time TIME, default 23:30
+- updated_at TIMESTAMPTZ
+
+attendance.employees:
+
+- id UUID primary key
+- organization_id UUID
+- employee_code VARCHAR(50)
+- full_name VARCHAR(100)
+- email VARCHAR(150), nullable
+- phone VARCHAR(20), nullable
+- department VARCHAR(100), nullable
+- designation VARCHAR(100), nullable
+- status: active or inactive
+- presence: inside or outside
+- face_enrolled BOOLEAN
+- created_at and updated_at
+- unique (organization_id, employee_code)
+
+attendance.gates:
+
+- id UUID primary key
+- organization_id UUID
+- name VARCHAR(80)
+- direction: entry, exit, or both
+- created_at
+- unique (organization_id, name)
+
+Known gap: gates do not have an active/inactive column even though the roadmap
+requests gate deactivation. Make an explicit migration decision when gates are
+implemented; do not invent a column only in code.
+
+attendance.attendance_logs:
+
+- Raw check-in/check-out events
+- Organization, employee and optional gate IDs
+- action: check_in/check_out
+- status: on_time/late/normal/early_leave
+- late_by_minutes, confidence, source and logged_at
+
+attendance.daily_attendance:
+
+- One row per employee/work date
+- first_check_in, last_check_out, total_minutes and late_by_minutes
+- status: present/late/absent/holiday/weekend/incomplete
+- unique (employee_id, work_date)
+
+Recognition embeddings use vector(128). The documented query uses L2 distance
+with the <-> operator and a default threshold of 0.6. Do not change the vector
+dimension, distance metric, or threshold direction without inspecting the
+matching implementation.
+
+There is no migration system yet. db/init.sql runs automatically only when a
+new PostgreSQL volume is initialized. Future schema changes need explicit,
+repeatable migration files; changing init.sql alone does not update an existing
+volume.
+
+
+8. AUTH SERVICE — IMPLEMENTED AND VERIFIED
+------------------------------------------
+
+Address: http://127.0.0.1:4001
+
+Endpoints:
+
+- POST /api/auth/signup
+- POST /api/auth/login
+- POST /api/auth/refresh
+- POST /api/auth/logout
+- GET /api/auth/me
+- GET /api/users
+- POST /api/users
+- PATCH /api/users/:id
+- GET /health
+
+Behavior:
+
+- Creates organization and first org_admin in one transaction
+- bcrypt cost 12
+- Password minimum 12 characters and maximum 72 bytes
+- 15-minute HS256 access JWT
+- JWT issuer smartgate-auth
+- JWT audience smartgate-platform
+- 14-day refresh tokens
+- Refresh plaintext only in HttpOnly cookie
+- SHA-256 refresh-token hashes in PostgreSQL
+- Refresh token rotation
+- Logout revocation
+- Session revocation after email/password/role/active-state changes
+- Current user, organization and session checked from database
+- Disabled users and suspended organizations lose access
+- Organization-scoped user management
+
+Roles:
+
+- super_admin
+- org_admin
+- manager
+- gate_operator
+- viewer
+
+Verified:
+
+- Signup and login work
+- Gateway login returned HTTP 200, JWT and refresh cookie
+- Missing token returns 401
+- Viewer cannot manage users
+- Deactivated users lose access
+- Cross-organization user access is denied
+- Logout invalidates the session
+
+Do not rewrite Auth unless a demonstrated bug requires it.
+
+
+9. API GATEWAY — IMPLEMENTED AND VERIFIED
+-----------------------------------------
+
+Address: http://127.0.0.1:4000
+
+Current mappings:
+
+- Auth routes
+- User-management routes
+- Attendance policy GET/PUT routes
+
+The gateway authenticates protected requests through Auth /api/auth/me.
+Downstream services still enforce authentication, roles, and organization
+isolation.
+
+Verified gateway behavior:
+
+- Allowed frontend origin works
+- Disallowed origin returns 403
+- Missing bearer token returns 401
+- Unknown route returns 404
+- Malformed JSON is forwarded and handled correctly
+- Client identity headers do not bypass authentication
+- Upstream errors have explicit responses
+- /internal/punch is not publicly mapped
+
+Known warning: the gateway proxy dependency emits a Node.js util._extend
+deprecation warning under Node 24. It did not affect functionality. Do not make
+a risky dependency upgrade solely for the warning.
+
+
+10. ATTENDANCE SERVICE — IMPLEMENTED POLICY SLICE
+-------------------------------------------------
+
+Address: http://127.0.0.1:4002
+
+Implemented endpoints:
+
+- Direct GET /health
+- Gateway GET /api/attendance/policy
+- Gateway PUT /api/attendance/policy
+
+Security:
+
+- Uses ATTENDANCE_DATABASE_URL and attendance_svc
+- Independently verifies bearer sessions through Auth /api/auth/me
+- Does not trust client identity headers
+- Uses authenticated user organization_id
+- Users without an organization receive 403
+- Organization users may read policy
+- Only org_admin may create/update policy
+- super_admin has no organization scope and is currently rejected
+
+Policy behavior:
+
+- GET returns 404 when no policy exists
+- PUT requires all supported fields and rejects extras
+- PUT uses parameterized INSERT ... ON CONFLICT UPDATE
+- updated_at is refreshed
+- Validates IANA timezone
+- Accepts HH:MM or HH:MM:SS and normalizes time
+- grace_minutes must be integer 0-1440
+- working_days must be unique ISO weekdays 1-7
+- work_start and work_end must differ
+
+Request example:
+
+{
+  "timezone": "Asia/Karachi",
+  "work_start": "09:00",
+  "work_end": "17:00",
+  "grace_minutes": 10,
+  "working_days": [1, 2, 3, 4, 5],
+  "auto_close_time": "23:30"
+}
+
+Tests:
+
+cd services/attendance-service
+npm test
+
+Last result: 3 tests passed, 0 failed.
+
+Live integration checks passed:
+
+- Attendance health 200
+- Missing token 401
+- Missing policy 404
+- Valid org-admin upsert/read 200
+- Invalid timezone 400
+- Malformed JSON 400
+- Viewer update 403
+- Spoofed organization headers cannot change scope
+- /internal/punch remains unmapped
+- Temporary policy and session data was removed
+- Database returned to 10 refresh-token rows and zero policies
+
+npm install reported two moderate advisories. The AI sandbox could not access
+the npm audit endpoint, so no forced/breaking audit fix was applied. Run npm
+audit normally and review the dependency chain before changing versions. Do not
+run npm audit fix --force blindly.
+
+
+11. ENVIRONMENT CONFIGURATION
+-----------------------------
+
+.env is secret, local and ignored. Never commit or print its secret values.
+
+.env.example now uses smartgate2 and documents:
+
+- PostgreSQL/Redis settings
+- All four service database URLs
+- AUTH_PORT=4001
+- ATTENDANCE_PORT=4002
+- GATEWAY_PORT=4000
+- AUTH_HOST=127.0.0.1
+- ATTENDANCE_HOST=127.0.0.1
+- GATEWAY_HOST=127.0.0.1
+- AUTH_SERVICE_URL=http://127.0.0.1:4001
+- ATTENDANCE_SERVICE_URL=http://127.0.0.1:4002
+- FRONTEND_ORIGIN=http://localhost:5173
+- JWT secret placeholder
+- NODE_ENV
+
+The local ignored .env contains the Attendance variables and its duplicate
+FRONTEND_ORIGIN entry was removed.
+
+
+12. RUNNING THE CURRENT SYSTEM
+------------------------------
+
+From the root:
+
+docker compose up -d
+
+Separate PowerShell terminals:
+
+cd D:\ClassProjects\FYP2-8TH-SEMESTER\smartgate-platform\services\auth-service
+npm start
+
+cd D:\ClassProjects\FYP2-8TH-SEMESTER\smartgate-platform\services\attendance-service
+npm start
+
+cd D:\ClassProjects\FYP2-8TH-SEMESTER\smartgate-platform\gateway
+npm start
+
+Health checks:
+
+curl.exe -i http://127.0.0.1:4000/health
+curl.exe -i http://127.0.0.1:4001/health
+curl.exe -i http://127.0.0.1:4002/health
+
+The frontend does not exist yet.
+
+
+13. DEVELOPMENT RULES
+---------------------
+
+1. Inspect before changing.
+2. Preserve working Auth and Gateway behavior.
+3. Implement one coherent feature slice at a time.
+4. Explain intended files and tests before editing.
+5. Use CommonJS and server.js entry points.
+6. Keep route logic in route files; no controllers.
+7. Keep code direct and understandable.
+8. Use parameterized SQL.
+9. Validate all trust-boundary input.
+10. Enforce tenant isolation in backend queries.
+11. Keep service responsibilities separate.
+12. Do not give Attendance access to the Auth schema.
+13. Do not expose internal routes through the gateway.
+14. Use Redis Streams only where asynchronous processing helps.
+15. Do not use events for ordinary CRUD.
+16. Do not hardcode or commit secrets.
+17. Never commit .env, node_modules, uploads, snapshots, tokens or face images.
+18. Test every meaningful feature.
+19. Update PROJECT_STATUS.md after every feature.
+20. Commit only as AliGhulamHussain <bsahab4455@gmail.com>.
+21. Never force-push or discard user work.
+
+If a requirement conflicts with the schema, document and resolve the decision;
+do not fabricate implementation details.
+
+
+14. KNOWN GAPS AND RISKS
+------------------------
+
+- No migration framework
+- Service-role dev passwords embedded in db/init.sql
+- Gate activation requested but no status column exists
+- No recognition-event idempotency key in Attendance logs
+- Duplicate camera-event behavior not designed
+- No internal authentication for POST /internal/punch
+- Redis stream names/consumer groups/retry/deduplication undefined
+- Automated tests currently cover policy validation only
+- Two moderate Attendance dependency advisories need normal npm audit review
+- Auth rate limiting is in-memory; inspect gateway/client IP behavior later
+- Recognition Service, Alerts Service and frontend are absent
+
+
+15. EXACT NEXT TASK — EMPLOYEE MANAGEMENT
+-----------------------------------------
+
+Implement employee management in the existing Attendance Service before
+Recognition, Alerts, or frontend work.
+
+Planned public endpoints:
+
+- POST /api/attendance/employees
+- GET /api/attendance/employees
+- GET /api/attendance/employees/:id
+- PATCH /api/attendance/employees/:id
+
+Use the existing attendance.employees table. No migration is expected.
+
+Required behavior:
+
+- organization_id comes only from the authenticated user
+- New employees keep DB defaults: active, outside, face_enrolled=false
+- CRUD clients cannot set presence; punch processing owns presence
+- CRUD clients cannot set face_enrolled; Recognition owns enrollment
+- Deactivate through status=inactive; never delete employee history
+- Validate required employee_code and full_name
+- Validate optional email, phone, department and designation
+- Reject unsupported fields
+- Enforce unique employee_code per organization
+- Convert duplicate conflict into safe HTTP 409
+- Add pagination
+- Add useful search/status/presence/department filters without overengineering
+- Scope every SELECT and UPDATE by organization_id
+- Safest MVP permission default: all organization roles read; org_admin writes
+- Add matching Gateway routes through the existing Attendance proxy
+
+Required tests:
+
+- Validation unit tests
+- Create/list/get/update employee through Gateway
+- Deactivate/reactivate employee
+- Duplicate employee_code returns 409
+- Invalid UUID returns 400
+- Missing token returns 401
+- Viewer write returns 403
+- Organization A cannot get/update Organization B employee
+- Spoofed identity headers cannot change tenant scope
+- Existing Auth/Gateway/policy checks still pass
+- Restore or remove temporary integration records
+
+After the feature:
+
+- Update PROJECT_STATUS.md
+- Run syntax checks and npm tests
+- Confirm temporary ports are stopped
+- Confirm .env and node_modules are ignored
+- Commit as the user with message such as:
+  feat: add attendance employee management
+- Push normally without force
+
+
+16. ROADMAP AFTER EMPLOYEES
+---------------------------
+
+1. Employee CRUD and organization filtering
+2. Gate CRUD and gate-status schema decision
+3. Internal POST /internal/punch and internal authentication
+4. Duplicate recognition protection
+5. Check-in/check-out and late calculation
+6. Presence and daily summaries
+7. Attendance history/monitoring/statistics APIs
+8. Recognition embedding enrollment and matching
+9. Recognition-to-Attendance integration
+10. Unknown-face Redis event flow
+11. Alerts Service and notifications
+12. React dashboard and gate kiosk
+13. End-to-end two-organization testing
+14. Demo data, diagrams, API docs, report and presentation
+
+
+17. FIRST ACTIONS IN THE NEW CLAUDE CODE CHAT
+---------------------------------------------
+
+1. Open the project directory.
+2. Read this file completely.
+3. Read PROJECT_STATUS.md completely.
+4. Inspect git status, log and origin before changing files.
+5. Verify f93c148 exists locally and remotely.
+6. Inspect db/init.sql and all Attendance source files.
+7. Run Attendance npm tests.
+8. Check Docker/PostgreSQL/Redis state.
+9. Present a short employee-management implementation plan.
+10. Implement and test only that slice.
+
+Do not restart the project. Continue from the existing working foundation.
+
