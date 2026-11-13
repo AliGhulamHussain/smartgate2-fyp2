@@ -259,6 +259,90 @@ function readGate(body, { partial = false } = {}) {
   return gate;
 }
 
+// Validates the body Recognition sends to POST /internal/punch.
+function readPunch(body) {
+  const allowed = ["organization_id", "employee_id", "gate_id", "confidence"];
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    fail(400, "Request body must be a JSON object.");
+  }
+
+  const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
+
+  if (unknown.length > 0) {
+    fail(400, `Unsupported fields: ${unknown.join(", ")}.`);
+  }
+
+  for (const field of ["organization_id", "employee_id", "gate_id"]) {
+    if (!validUuid(body[field])) {
+      fail(400, `${field} must be a valid UUID.`);
+    }
+  }
+
+  const confidence = body.confidence ?? null;
+
+  if (
+    confidence !== null &&
+    (typeof confidence !== "number" || !(confidence >= 0 && confidence <= 1))
+  ) {
+    fail(400, "confidence must be a number from 0 to 1.");
+  }
+
+  return {
+    organization_id: body.organization_id,
+    employee_id: body.employee_id,
+    gate_id: body.gate_id,
+    confidence,
+  };
+}
+
+// "HH:MM:SS" or "HH:MM:SS.ffffff" (as PostgreSQL returns time) -> seconds.
+function timeToSeconds(value) {
+  const [hours, minutes, seconds] = value.split(":").map(Number);
+  return hours * 3600 + minutes * 60 + Math.floor(seconds);
+}
+
+// Entry gates only check in, exit gates only check out, and "both" gates
+// toggle on current presence. Returns null when the punch makes no sense
+// (entering while already inside, or leaving while outside).
+function decideAction(direction, presence) {
+  if (direction === "entry") {
+    return presence === "outside" ? "check_in" : null;
+  }
+  if (direction === "exit") {
+    return presence === "inside" ? "check_out" : null;
+  }
+  return presence === "inside" ? "check_out" : "check_in";
+}
+
+// ponytail: assumes work_start < work_end on the same day; overnight shifts
+// are not supported for lateness or early-leave.
+//
+// Only the first check-in of a working day is judged. It is late when it is
+// more than grace_minutes after work_start, and late_by_minutes then counts
+// from work_start. Later re-entries (after lunch) are "normal".
+function checkInStatus({ localTime, workStart, graceMinutes, workingDay, firstToday }) {
+  if (!firstToday) {
+    return { status: "normal", late_by_minutes: 0 };
+  }
+
+  const secondsLate = timeToSeconds(localTime) - timeToSeconds(workStart);
+
+  if (workingDay && secondsLate > graceMinutes * 60) {
+    return { status: "late", late_by_minutes: Math.floor(secondsLate / 60) };
+  }
+
+  return { status: "on_time", late_by_minutes: 0 };
+}
+
+// Leaving before work_end on a working day is an early leave.
+function checkOutStatus({ localTime, workEnd, workingDay }) {
+  if (workingDay && timeToSeconds(localTime) < timeToSeconds(workEnd)) {
+    return "early_leave";
+  }
+  return "normal";
+}
+
 module.exports = {
   asyncHandler,
   fail,
@@ -266,4 +350,8 @@ module.exports = {
   readPolicy,
   readEmployee,
   readGate,
+  readPunch,
+  decideAction,
+  checkInStatus,
+  checkOutStatus,
 };

@@ -8,19 +8,25 @@ for (const name of [
   "ATTENDANCE_DATABASE_URL",
   "AUTH_SERVICE_URL",
   "FRONTEND_ORIGIN",
+  "INTERNAL_SERVICE_KEY",
 ]) {
   if (!process.env[name]) {
     throw new Error(`${name} is required.`);
   }
 }
 
+if (process.env.INTERNAL_SERVICE_KEY.length < 32) {
+  throw new Error("INTERNAL_SERVICE_KEY must be at least 32 characters.");
+}
+
 const express = require("express");
 const cors = require("cors");
-const { pool } = require("./db");
+const { pool, closeOpenSessions } = require("./db");
 const { asyncHandler } = require("./utils");
 const policyRoutes = require("./routes/policy");
 const employeeRoutes = require("./routes/employees");
 const gateRoutes = require("./routes/gates");
+const internalRoutes = require("./routes/internal");
 
 const app = express();
 
@@ -66,6 +72,9 @@ app.use("/api/attendance/policy", policyRoutes);
 app.use("/api/attendance/employees", employeeRoutes);
 app.use("/api/attendance/gates", gateRoutes);
 
+// Service-to-service routes; the gateway must never expose these.
+app.use("/internal", internalRoutes);
+
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });
 });
@@ -101,7 +110,15 @@ async function start() {
     console.log(`Attendance service running at http://${host}:${port}`);
   });
 
+  // Close forgotten check-outs once auto_close_time passes.
+  const autoClose = setInterval(() => {
+    closeOpenSessions(pool).catch((error) => {
+      console.error("Auto-close failed:", error.code || error.message);
+    });
+  }, 60 * 1000);
+
   function shutdown() {
+    clearInterval(autoClose);
     server.close(async () => {
       await pool.end();
       process.exit(0);

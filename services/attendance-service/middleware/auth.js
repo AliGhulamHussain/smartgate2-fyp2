@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { asyncHandler, fail, validUuid } = require("../utils");
 
 const authenticate = asyncHandler(async (req, res, next) => {
@@ -65,4 +66,26 @@ function allowRoles(...roles) {
   };
 }
 
-module.exports = { authenticate, requireOrganization, allowRoles };
+// Service-to-service check for /internal routes. Recognition sends the
+// shared INTERNAL_SERVICE_KEY in X-Internal-Key. Hashing both values first
+// lets timingSafeEqual compare them without leaking the key length.
+function requireInternalKey(req, res, next) {
+  const hash = (value) => crypto.createHash("sha256").update(value).digest();
+  const given = req.get("X-Internal-Key") || "";
+
+  if (
+    !given ||
+    !crypto.timingSafeEqual(hash(given), hash(process.env.INTERNAL_SERVICE_KEY))
+  ) {
+    return res.status(401).json({ message: "Invalid internal service key." });
+  }
+
+  next();
+}
+
+module.exports = {
+  authenticate,
+  requireOrganization,
+  allowRoles,
+  requireInternalKey,
+};

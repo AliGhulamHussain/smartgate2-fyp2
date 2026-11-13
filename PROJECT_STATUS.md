@@ -54,11 +54,11 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
 | API Gateway | Implemented and live-tested | Auth, user-management, attendance-policy, employee and gate mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
-| Attendance Service | Partially implemented | Foundation, health check, policy, employee and gate APIs completed |
+| Attendance Service | Partially implemented | Policy, employee, gate APIs and internal punch processing completed |
 | Recognition Service | Not implemented | Directory is empty; database schema exists |
 | Alerts Service | Not implemented | Directory is empty; database schema exists |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Started | Eleven unit tests (policy, employee and gate validation) plus live integration checks |
+| Automated tests | Started | Sixteen unit tests (validation and punch rules) plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -114,6 +114,14 @@ Verified on 2026-11-10:
 
 These counts describe the local development volume and are not fixtures.
 
+## Implemented Internal API (not exposed by the gateway)
+
+- `POST /internal/punch` on the Attendance Service (`127.0.0.1:4002`), called by Recognition after a face match
+  - Header `X-Internal-Key` must equal `INTERNAL_SERVICE_KEY` from `.env` (at least 32 characters; Attendance refuses to start without it)
+  - Body: `organization_id`, `employee_id`, `gate_id` (UUIDs), optional `confidence` (0-1); other fields are rejected
+  - `201 { recorded: true, log, employee }` when recorded; `200 { recorded: false, reason }` when ignored (`cooldown`, `already_inside`, `not_inside`)
+  - `401` bad key, `400` invalid body, `404` employee/gate not in that organization, `409` inactive employee/gate or no policy
+
 ## Implemented Public API
 
 - `GET /health`
@@ -167,6 +175,17 @@ Implemented Attendance behavior:
 - Gates are deactivated with `status=inactive`, never deleted (attendance logs reference them)
 - Gate list filters: `status`, `direction`; no pagination (organizations have few gates)
 
+Implemented punch processing:
+
+- Entry gates check in, exit gates check out, `both` gates toggle on current presence
+- Repeat punches for the same employee within `PUNCH_COOLDOWN_SECONDS` (default 180) are ignored; the employee row is locked so simultaneous punches record once
+- Times use the organization's policy timezone; a working day is a policy working day that is not in `attendance.holidays`
+- Only the first check-in of a working day is judged: more than `grace_minutes` after `work_start` is `late`, and `late_by_minutes` counts from `work_start`; re-entries are `normal`; non-working days are never late
+- Check-out before `work_end` on a working day is `early_leave`, otherwise `normal`
+- Each check-in/out writes `attendance.attendance_logs` and updates `employees.presence`
+- `attendance.daily_attendance` gets one row per employee/day on first check-in (`present` or `late`); each check-out sets `last_check_out` and adds the visit's minutes to `total_minutes`
+- Forgotten check-outs: a job every minute moves employees outside once `auto_close_time` passes (or the check-in was on an earlier day) and marks that day `incomplete`; the punch path also closes such sessions first. No fake check-out log is written
+
 ## Verified Runtime Behavior
 
 Verified on 2026-11-10 without creating new application data:
@@ -215,12 +234,28 @@ Gate management verified on 2026-11-13 through the gateway (41 live checks, all 
 - Employee checks (50) re-run and passed; policy, origin, logout and `/internal/punch` regressions pass
 - Temporary data removed; counts returned to 3 organizations, 4 users, 10 refresh tokens and zero policies, employees and gates
 
+Punch processing verified on 2026-11-13 (37 live checks, run twice, all passed; Attendance started with `PUNCH_COOLDOWN_SECONDS=3` for testing):
+
+- Missing/wrong internal key `401`; the gateway returns `404` for `/internal/punch` even with the key
+- Invalid body `400`; no policy `409`; inactive employee/gate `409`; employee or gate from another organization `404`
+- Late first check-in (`late`, ~30 minutes), on-time check-in, holiday check-in not late
+- Cooldown, entry-while-inside and exit-while-outside are ignored with reasons
+- Early-leave check-out, re-entry `normal`, `both` gate toggling, presence updates
+- Daily summary has one row with first/last times, total minutes and `late` status
+- A forgotten check-out from the previous day is closed by the next punch (`incomplete`) and today is recorded; the background auto-close path does the same and leaves today's open sessions alone
+- Five simultaneous punches for one employee record exactly one
+- Employee (50) and gate (41) checks re-run and passed; Attendance refuses to start with a short internal key
+- Temporary data removed; all counts returned to baseline, with zero attendance logs, daily rows and holidays
+
 ## Known Gaps and Risks
 
 - There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
 - Database service-role development passwords are embedded in `db/init.sql`.
-- Attendance logs have no recognition-event idempotency key; duplicate camera events need an explicit strategy.
-- No internal service authentication mechanism exists for `POST /internal/punch`.
+- Duplicate camera events are handled by a per-employee cooldown, not an idempotency key. A person standing at a `both` gate longer than the cooldown is toggled; the kiosk/Recognition should also debounce.
+- Overnight shifts (`work_end` before `work_start`) are not supported for lateness, early-leave or work-date assignment.
+- Absent, weekend and holiday days are not stored as rows yet; daily rows exist only for days with a check-in. Reports must treat missing working days as absent.
+- Holidays have no API yet; rows can only be added directly in the database.
+- `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
 - Redis stream names and consumer behavior are not defined.
 - Gateway proxy dependencies emit a Node.js `util._extend` deprecation warning under Node 24.
 - Automated unit coverage covers policy and employee validation only; live integration checks are run manually and are not yet a committed test suite.
@@ -228,12 +263,12 @@ Gate management verified on 2026-11-13 through the gateway (41 live checks, all 
 
 ## Immediate Next Task
 
-Implement the internal punch endpoint in the Attendance Service: `POST /internal/punch`.
+Attendance monitoring and statistics APIs in the Attendance Service (read-only, through the gateway, organization-scoped):
 
-- Called only by the Recognition Service, never mapped through the gateway.
-- Needs an internal service-authentication decision (for example a shared secret header from `.env`).
-- Needs a duplicate-event strategy (attendance logs have no recognition-event idempotency key; decide on a cooldown window or a migration adding a key).
-- Must reject inactive employees and inactive gates, and verify both belong to the same organization.
+- Current presence (who is inside now, counts)
+- Attendance log history with date range, employee and gate filters and pagination
+- Daily attendance for a date, including employees with no row as absent on working days
+- Simple dashboard statistics (present, late, absent, inside counts for today)
 
 ## Schema and Migration History
 
@@ -246,8 +281,8 @@ Implement the internal punch endpoint in the Attendance Service: `POST /internal
 1. Completed: Attendance Service foundation and policy APIs
 2. Completed: Employee CRUD and organization filtering
 3. Completed: Gate CRUD and gate-status migration
-4. Internal punch endpoint and duplicate protection
-5. Check-in/check-out, lateness, presence and daily summaries
+4. Completed: Internal punch endpoint and duplicate protection
+5. Completed: Check-in/check-out, lateness, presence and daily summaries
 6. Attendance monitoring and statistics APIs
 7. Recognition Service and embedding registration/matching
 8. Unknown-face event flow and Alerts Service
