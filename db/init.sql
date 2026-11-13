@@ -93,6 +93,9 @@ CREATE TABLE attendance.gates (
     name             varchar(80) NOT NULL,
     direction        varchar(10) NOT NULL DEFAULT 'both'
                      CHECK (direction IN ('entry', 'exit', 'both')),
+    -- Added by db/migrations/001_gate_status.sql for existing volumes.
+    status           varchar(10) NOT NULL DEFAULT 'active'
+                     CHECK (status IN ('active', 'inactive')),
     created_at       timestamptz NOT NULL DEFAULT now(),
     UNIQUE (organization_id, name)
 );

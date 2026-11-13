@@ -52,13 +52,13 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | pgvector | Verified | Extension version 0.8.6 |
 | Database role isolation | Verified | All four service roles can access only their own schemas |
 | Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
-| API Gateway | Implemented and live-tested | Auth, user-management, attendance-policy and employee mappings |
+| API Gateway | Implemented and live-tested | Auth, user-management, attendance-policy, employee and gate mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
-| Attendance Service | Partially implemented | Foundation, health check, policy and employee-management APIs completed |
+| Attendance Service | Partially implemented | Foundation, health check, policy, employee and gate APIs completed |
 | Recognition Service | Not implemented | Directory is empty; database schema exists |
 | Alerts Service | Not implemented | Directory is empty; database schema exists |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Started | Eight unit tests (policy and employee validation) plus live integration checks |
+| Automated tests | Started | Eleven unit tests (policy, employee and gate validation) plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -131,6 +131,10 @@ These counts describe the local development volume and are not fixtures.
 - `POST /api/attendance/employees`
 - `GET /api/attendance/employees/:id`
 - `PATCH /api/attendance/employees/:id`
+- `GET /api/attendance/gates`
+- `POST /api/attendance/gates`
+- `GET /api/attendance/gates/:id`
+- `PATCH /api/attendance/gates/:id`
 
 Implemented Auth behavior:
 
@@ -158,6 +162,10 @@ Implemented Attendance behavior:
 - Deactivation and reactivation through `PATCH` with `status`; employees are never deleted
 - Duplicate `employee_code` within an organization returns `409`
 - List supports `page`, `limit` (default 20, max 100), `search` (name or code), `status`, `presence` and `department`
+- Organization-scoped gate create/list/get/update; all organization roles read, only `org_admin` writes
+- Gate fields: `name` (required, max 80, unique per organization, `409` on duplicate), `direction` (`entry`/`exit`/`both`, default `both`); `status` only on `PATCH`
+- Gates are deactivated with `status=inactive`, never deleted (attendance logs reference them)
+- Gate list filters: `status`, `direction`; no pagination (organizations have few gates)
 
 ## Verified Runtime Behavior
 
@@ -196,11 +204,21 @@ Employee management verified on 2026-11-13 through the gateway (50 live checks, 
 - Auth, policy, origin, logout and `/internal/punch` regression checks still pass
 - Temporary organizations, users, sessions, policy and employees were removed; counts returned to 3 organizations, 4 users, 10 refresh tokens, 0 policies, 0 employees
 
+Gate management verified on 2026-11-13 through the gateway (41 live checks, all passed):
+
+- Create, list, get, rename, change direction, deactivate and reactivate work; defaults are `both`/`active`
+- Duplicate gate name returns `409` on create and rename; the same name is allowed in another organization
+- Bad direction/status, unsupported fields, empty updates, invalid UUIDs and malformed JSON return `400`
+- Missing token `401`; viewer writes `403`; viewers can read
+- Organization B gets `404` reading or updating an Organization A gate, and the update is not applied
+- Spoofed identity headers cannot change tenant scope
+- Employee checks (50) re-run and passed; policy, origin, logout and `/internal/punch` regressions pass
+- Temporary data removed; counts returned to 3 organizations, 4 users, 10 refresh tokens and zero policies, employees and gates
+
 ## Known Gaps and Risks
 
-- There is no migration system; `db/init.sql` only runs automatically for a new PostgreSQL volume.
+- There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
 - Database service-role development passwords are embedded in `db/init.sql`.
-- Gates have no active/inactive column although the roadmap requests gate deactivation.
 - Attendance logs have no recognition-event idempotency key; duplicate camera events need an explicit strategy.
 - No internal service authentication mechanism exists for `POST /internal/punch`.
 - Redis stream names and consumer behavior are not defined.
@@ -210,17 +228,24 @@ Employee management verified on 2026-11-13 through the gateway (50 live checks, 
 
 ## Immediate Next Task
 
-Implement organization-scoped gate management in the Attendance Service.
+Implement the internal punch endpoint in the Attendance Service: `POST /internal/punch`.
 
-- Decide whether gates need an `is_active`/status column. If yes, add an explicit, repeatable migration file; do not add the column only in code or only in `db/init.sql`.
-- Planned endpoints: `POST`, `GET`, `GET /:id`, `PATCH /:id` under `/api/attendance/gates`
-- Same rules as employees: organization from the authenticated user, `org_admin` writes, all organization roles read, `409` for duplicate gate names, gateway routes, unit and live tests.
+- Called only by the Recognition Service, never mapped through the gateway.
+- Needs an internal service-authentication decision (for example a shared secret header from `.env`).
+- Needs a duplicate-event strategy (attendance logs have no recognition-event idempotency key; decide on a cooldown window or a migration adding a key).
+- Must reject inactive employees and inactive gates, and verify both belong to the same organization.
+
+## Schema and Migration History
+
+| Migration | Date | Change | Applied to local volume |
+|---|---|---|---|
+| `db/migrations/001_gate_status.sql` | 2026-11-13 | `attendance.gates.status` (`active`/`inactive`, default `active`); also added to `db/init.sql` | Yes |
 
 ## Remaining Roadmap
 
 1. Completed: Attendance Service foundation and policy APIs
 2. Completed: Employee CRUD and organization filtering
-3. Gate CRUD and gate-status schema decision
+3. Completed: Gate CRUD and gate-status migration
 4. Internal punch endpoint and duplicate protection
 5. Check-in/check-out, lateness, presence and daily summaries
 6. Attendance monitoring and statistics APIs

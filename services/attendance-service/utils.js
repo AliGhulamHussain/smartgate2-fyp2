@@ -212,10 +212,58 @@ function readEmployee(body, { partial = false } = {}) {
   return employee;
 }
 
+// Validates a gate body. With partial = true (PATCH), fields are optional
+// but at least one is needed, and status may be changed.
+function readGate(body, { partial = false } = {}) {
+  const allowed = partial ? ["name", "direction", "status"] : ["name", "direction"];
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    fail(400, "Request body must be a JSON object.");
+  }
+
+  const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
+
+  if (unknown.length > 0) {
+    fail(400, `Unsupported fields: ${unknown.join(", ")}.`);
+  }
+
+  if (partial && Object.keys(body).length === 0) {
+    fail(400, "Provide at least one field to update.");
+  }
+
+  const gate = {};
+
+  if ("name" in body || !partial) {
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+
+    if (name === "" || name.length > 80) {
+      fail(400, "name is required and must be at most 80 characters.");
+    }
+    gate.name = name;
+  }
+
+  if ("direction" in body) {
+    if (!["entry", "exit", "both"].includes(body.direction)) {
+      fail(400, "direction must be entry, exit or both.");
+    }
+    gate.direction = body.direction;
+  }
+
+  if ("status" in body) {
+    if (!["active", "inactive"].includes(body.status)) {
+      fail(400, "status must be active or inactive.");
+    }
+    gate.status = body.status;
+  }
+
+  return gate;
+}
+
 module.exports = {
   asyncHandler,
   fail,
   validUuid,
   readPolicy,
   readEmployee,
+  readGate,
 };

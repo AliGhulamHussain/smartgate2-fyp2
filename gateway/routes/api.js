@@ -91,4 +91,9 @@ router.post("/api/attendance/employees", authenticate, attendanceProxy);
 router.get("/api/attendance/employees/:id", authenticate, attendanceProxy);
 router.patch("/api/attendance/employees/:id", authenticate, attendanceProxy);
 
+router.get("/api/attendance/gates", authenticate, attendanceProxy);
+router.post("/api/attendance/gates", authenticate, attendanceProxy);
+router.get("/api/attendance/gates/:id", authenticate, attendanceProxy);
+router.patch("/api/attendance/gates/:id", authenticate, attendanceProxy);
+
 module.exports = router;

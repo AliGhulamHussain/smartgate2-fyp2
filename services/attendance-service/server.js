@@ -20,6 +20,7 @@ const { pool } = require("./db");
 const { asyncHandler } = require("./utils");
 const policyRoutes = require("./routes/policy");
 const employeeRoutes = require("./routes/employees");
+const gateRoutes = require("./routes/gates");
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.get(
 
 app.use("/api/attendance/policy", policyRoutes);
 app.use("/api/attendance/employees", employeeRoutes);
+app.use("/api/attendance/gates", gateRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });
