@@ -35,7 +35,7 @@ Deferred:
 | API Gateway | Windows, `127.0.0.1:4000` | Public frontend entry point and service routing |
 | Auth Service | Windows, `127.0.0.1:4001` | Organizations, users, JWTs, refresh sessions and RBAC |
 | Attendance Service | Windows, `127.0.0.1:4002` | Policies, employees, gates, attendance and presence |
-| Recognition Service | Planned | Embeddings, matching and recognition events |
+| Recognition Service | Windows, `127.0.0.1:4003` | Face enrollment, matching and recognition events |
 | Alerts Service | Planned | Unknown faces, notifications and event consumption |
 | PostgreSQL + pgvector | Docker, host port `5433` | Persistent service-specific schemas |
 | Redis | Docker, host port `6379` | Redis Streams and asynchronous events |
@@ -52,13 +52,13 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | pgvector | Verified | Extension version 0.8.6 |
 | Database role isolation | Verified | All four service roles can access only their own schemas |
 | Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
-| API Gateway | Implemented and live-tested | Auth, user-management and all public Attendance mappings |
+| API Gateway | Implemented and live-tested | Auth, user-management, Attendance and Recognition mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
-| Attendance Service | Partially implemented | Policy, employee, gate, punch processing and monitoring APIs completed |
-| Recognition Service | Not implemented | Directory is empty; database schema exists |
+| Attendance Service | Implemented and live-tested | Policy, employee, gate, punch processing and monitoring APIs |
+| Recognition Service | Implemented and live-tested | Enrollment, identification with pgvector, settings, Attendance punch integration |
 | Alerts Service | Not implemented | Directory is empty; database schema exists |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Started | Eighteen unit tests (validation, query parsing and punch rules) plus live integration checks |
+| Automated tests | Started | 18 Attendance and 5 Recognition unit tests plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -116,10 +116,12 @@ These counts describe the local development volume and are not fixtures.
 
 ## Implemented Internal API (not exposed by the gateway)
 
+- `PUT /internal/employees/:id/face-enrolled` on Attendance, called by Recognition with `X-Internal-Key`; body `{ organization_id, face_enrolled }`
+
 - `POST /internal/punch` on the Attendance Service (`127.0.0.1:4002`), called by Recognition after a face match
   - Header `X-Internal-Key` must equal `INTERNAL_SERVICE_KEY` from `.env` (at least 32 characters; Attendance refuses to start without it)
   - Body: `organization_id`, `employee_id`, `gate_id` (UUIDs), optional `confidence` (0-1); other fields are rejected
-  - `201 { recorded: true, log, employee }` when recorded; `200 { recorded: false, reason }` when ignored (`cooldown`, `already_inside`, `not_inside`)
+  - `201 { recorded: true, log, employee }` when recorded; `200 { recorded: false, reason, employee }` when ignored (`cooldown`, `already_inside`, `not_inside`)
   - `401` bad key, `400` invalid body, `404` employee/gate not in that organization, `409` inactive employee/gate or no policy
 
 ## Implemented Public API
@@ -147,6 +149,12 @@ These counts describe the local development volume and are not fixtures.
 - `GET /api/attendance/logs`
 - `GET /api/attendance/daily`
 - `GET /api/attendance/stats`
+- `GET /api/recognition/employees/:id/faces`
+- `PUT /api/recognition/employees/:id/faces`
+- `DELETE /api/recognition/employees/:id/faces`
+- `POST /api/recognition/identify`
+- `GET /api/recognition/settings`
+- `PUT /api/recognition/settings`
 
 Implemented Auth behavior:
 
@@ -196,6 +204,18 @@ Implemented monitoring (read-only, all organization roles, organization-scoped, 
 - `logs`: punch history with employee and gate names; filters `from`/`to` (inclusive dates in the policy timezone), `employee_id`, `gate_id`, `action`, `status`; `page`, `limit` (default 50, max 200)
 - `daily`: one record per employee for `date` (default today, no future dates) with `day_type` (`working`/`weekend`/`holiday`), a status `summary`, and filters `status`, `department`, `page`, `limit`. Employees without a row are `absent` on working days, otherwise `weekend`/`holiday`. Employees created after the date are excluded; inactive employees appear only if they have a row
 - `stats`: today's date, `active_employees`, `inside_now`, today's present/late/incomplete/absent counts and a 7-day `trend` using the same absent rule
+
+Implemented Recognition behavior:
+
+- Face detection and descriptor extraction run in the browser with `@vladmandic/face-api` (maintained face-api.js fork); the service receives only 128-number descriptors and never stores or receives images
+- Restricted `recognition_svc` database connection; bearer verification through Auth; employees and gates are verified through Attendance APIs, never by reading the Attendance schema
+- Enrollment (`org_admin`): 3-10 samples replace previous samples; only active employees; a face already enrolled for another employee in the organization returns `409`; Attendance `face_enrolled` is set through the internal endpoint and samples are rolled back if that fails
+- Sample count is readable by all organization roles; raw descriptors are never returned
+- Delete removes all samples and clears `face_enrolled`
+- Identify (`gate_operator`, `org_admin`): requires `liveness_passed: true` from the kiosk blink check when `liveness_required` is on; the gate must belong to the organization and be active
+- Matching uses pgvector L2 distance (`<->`), nearest sample per employee within the organization; a match needs distance <= `match_threshold` (default 0.5) and the best person must beat the second-best by `RECOGNITION_MATCH_MARGIN` (default 0.05), otherwise `ambiguous`
+- Every identify attempt is stored in `recognition.recognition_events`; a match calls Attendance `POST /internal/punch` with confidence `1 - distance` and returns the employee and attendance result to the kiosk
+- Settings: `match_threshold` 0.2-0.8 and `liveness_required`; created with database defaults on first read
 
 ## Verified Runtime Behavior
 
@@ -268,6 +288,15 @@ Monitoring verified on 2026-11-13 through the gateway (37 live checks, all passe
 - Stats headline, today counts and 7-day trend (holiday not absent, no absences before employees existed)
 - Employee, gate and punch suites re-run and passed; temporary data removed and counts returned to baseline
 
+Recognition verified on 2026-11-13 through the gateway (44 live checks, all passed) using synthetic descriptors (about 0.15 distance within a person, 1.6 between people):
+
+- Health, missing token `401`, default settings 0.5/liveness on, settings validation and `org_admin`-only writes
+- Enrollment validation (sample count, descriptor shape, UUID), viewer/operator `403`, other-organization employee `404`, inactive employee `409`, duplicate face for another employee `409`, re-enrollment replaces samples, Attendance `face_enrolled` follows enroll/delete
+- Identify: viewer `403`, missing liveness `400`, inactive gate `409`, other-organization gate `404`, match records late check-in, repeat match ignored by cooldown with the employee name, `both` gate check-out, stranger `no_match`, look-alike `ambiguous`, organization B cannot match organization A faces, liveness can be disabled, threshold can be changed
+- Recognition events stored for matched and unmatched attempts; deleted faces no longer match; other-organization samples untouched
+- Internal Attendance endpoint needs the key and is not exposed by the gateway; a client-sent `X-Internal-Key` is stripped by the gateway
+- Employee, gate, punch and monitoring suites re-run and passed; all temporary data removed and every table returned to baseline; `recognition_svc` still cannot read the Attendance schema
+
 ## Known Gaps and Risks
 
 - There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
@@ -276,6 +305,10 @@ Monitoring verified on 2026-11-13 through the gateway (37 live checks, all passe
 - Overnight shifts (`work_end` before `work_start`) are not supported for lateness, early-leave or work-date assignment.
 - Absent, weekend and holiday days are not stored as rows; `daily` and `stats` compute them at read time. Employee activation history is not tracked, so a deactivated employee's past absences disappear from historical reports.
 - `presence` is not paginated (fine for hundreds of people inside at once).
+- The server trusts descriptors and the liveness flag sent by an authenticated kiosk; a blink check stops printed photos but not video replay or a modified client.
+- Identification scans every sample in the organization (fine for thousands of samples); add the HNSW index and a nearest-sample search for much larger organizations.
+- Unknown faces are recorded only as unmatched `recognition_events`; snapshots and alerts arrive with the Alerts slice.
+- The 0.5 threshold and 0.05 margin are starting values and must be tuned with real cameras during demo testing.
 - Holidays have no API yet; rows can only be added directly in the database.
 - `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
 - Redis stream names and consumer behavior are not defined.
@@ -285,19 +318,20 @@ Monitoring verified on 2026-11-13 through the gateway (37 live checks, all passe
 
 ## Immediate Next Task
 
-Start the Recognition Service (`services/recognition-service`, planned port `4003`):
+Unknown-face flow and the Alerts Service (`services/alerts-service`, planned port `4004`):
 
-- Express foundation, health endpoint, restricted `recognition_svc` database connection, bearer verification through Auth
-- Face enrollment: store 128-dimensional embeddings in `recognition.face_embeddings` for an Attendance employee (verify the employee through an Attendance API, never by reading the Attendance schema)
-- Matching with pgvector L2 distance (`<->`) and the 0.6 default threshold, recording `recognition.recognition_events`
-- On a match, call Attendance `POST /internal/punch` with `X-Internal-Key`
-- Decide how `face_enrolled` on the Attendance employee is updated (an internal Attendance endpoint is the likely answer)
+- Decide snapshot handling: the kiosk uploads a small JPEG of an unmatched face; store it on a Docker volume or local folder (never base64 in the database) and keep only `snapshot_path`
+- Recognition publishes an unknown-face event to a Redis Stream (define stream name, consumer group, retry and deduplication)
+- Alerts consumes the stream into `alerts.unknown_faces` and `alerts.notifications`
+- Public APIs to list unknown faces, view a snapshot, and mark them reviewed/dismissed
+- Organization isolation, role checks, gateway routes, unit and live tests
 
 ## Schema and Migration History
 
 | Migration | Date | Change | Applied to local volume |
 |---|---|---|---|
 | `db/migrations/001_gate_status.sql` | 2026-11-13 | `attendance.gates.status` (`active`/`inactive`, default `active`); also added to `db/init.sql` | Yes |
+| `db/migrations/002_recognition_threshold.sql` | 2026-11-13 | `recognition.org_settings.match_threshold` default 0.6 -> 0.5; also changed in `db/init.sql` | Yes |
 
 ## Remaining Roadmap
 
@@ -307,7 +341,7 @@ Start the Recognition Service (`services/recognition-service`, planned port `400
 4. Completed: Internal punch endpoint and duplicate protection
 5. Completed: Check-in/check-out, lateness, presence and daily summaries
 6. Completed: Attendance monitoring and statistics APIs
-7. Recognition Service and embedding registration/matching
+7. Completed: Recognition Service and embedding registration/matching
 8. Unknown-face event flow and Alerts Service
 9. React dashboard and kiosk
 10. End-to-end multi-tenant testing

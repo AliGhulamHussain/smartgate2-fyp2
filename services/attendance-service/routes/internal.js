@@ -1,10 +1,11 @@
 // Service-to-service routes. Never mapped through the API Gateway.
 const express = require("express");
-const { transaction, closeOpenSessions } = require("../db");
+const { pool, transaction, closeOpenSessions } = require("../db");
 const { requireInternalKey } = require("../middleware/auth");
 const {
   asyncHandler,
   fail,
+  validUuid,
   readPunch,
   decideAction,
   checkInStatus,
@@ -94,7 +95,7 @@ router.post(
       );
 
       if (recent.rows[0]) {
-        return { ignored: "cooldown" };
+        return { ignored: "cooldown", employee };
       }
 
       // A check-in left open from an earlier day must not block today.
@@ -109,7 +110,10 @@ router.post(
       const action = decideAction(gate.direction, presence);
 
       if (!action) {
-        return { ignored: presence === "inside" ? "already_inside" : "not_inside" };
+        return {
+          ignored: presence === "inside" ? "already_inside" : "not_inside",
+          employee,
+        };
       }
 
       const workingDay =
@@ -203,15 +207,45 @@ router.post(
       return { log: logResult.rows[0], employee };
     });
 
+    const employee = { id: outcome.employee.id, full_name: outcome.employee.full_name };
+
     if (outcome.ignored) {
-      return res.json({ recorded: false, reason: outcome.ignored });
+      return res.json({ recorded: false, reason: outcome.ignored, employee });
     }
 
-    res.status(201).json({
-      recorded: true,
-      log: outcome.log,
-      employee: { id: outcome.employee.id, full_name: outcome.employee.full_name },
-    });
+    res.status(201).json({ recorded: true, log: outcome.log, employee });
+  })
+);
+
+// Recognition calls this after enrolling or deleting an employee's faces.
+// Body: { organization_id, face_enrolled }.
+router.put(
+  "/employees/:id/face-enrolled",
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+
+    if (
+      !validUuid(req.params.id) ||
+      !validUuid(body.organization_id) ||
+      typeof body.face_enrolled !== "boolean" ||
+      Object.keys(body).length !== 2
+    ) {
+      fail(400, "Provide a valid employee id, organization_id and boolean face_enrolled.");
+    }
+
+    const result = await pool.query(
+      `UPDATE attendance.employees
+       SET face_enrolled = $3, updated_at = NOW()
+       WHERE id = $1 AND organization_id = $2
+       RETURNING id, face_enrolled`,
+      [req.params.id, body.organization_id, body.face_enrolled]
+    );
+
+    if (!result.rows[0]) {
+      fail(404, "Employee not found in this organization.");
+    }
+
+    res.json({ employee: result.rows[0] });
   })
 );
 

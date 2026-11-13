@@ -58,6 +58,34 @@ const attendanceProxy = createProxyMiddleware({
   },
 });
 
+const recognitionProxy = createProxyMiddleware({
+  target: process.env.RECOGNITION_SERVICE_URL,
+  changeOrigin: true,
+
+  pathRewrite: (path, req) => req.originalUrl,
+
+  proxyTimeout: 10000,
+  timeout: 15000,
+
+  on: {
+    error: (error, req, res) => {
+      console.error(
+        "Recognition proxy failed:",
+        error.code || error.name
+      );
+
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
+
+      res.status(502).json({
+        message: "Could not reach the Recognition service.",
+      });
+    },
+  },
+});
+
 // Public routes.
 router.post("/api/auth/signup", authProxy);
 router.post("/api/auth/login", authProxy);
@@ -101,5 +129,13 @@ router.get("/api/attendance/presence", authenticate, attendanceProxy);
 router.get("/api/attendance/logs", authenticate, attendanceProxy);
 router.get("/api/attendance/daily", authenticate, attendanceProxy);
 router.get("/api/attendance/stats", authenticate, attendanceProxy);
+
+// Recognition also checks roles and organization access.
+router.get("/api/recognition/employees/:id/faces", authenticate, recognitionProxy);
+router.put("/api/recognition/employees/:id/faces", authenticate, recognitionProxy);
+router.delete("/api/recognition/employees/:id/faces", authenticate, recognitionProxy);
+router.post("/api/recognition/identify", authenticate, recognitionProxy);
+router.get("/api/recognition/settings", authenticate, recognitionProxy);
+router.put("/api/recognition/settings", authenticate, recognitionProxy);
 
 module.exports = router;

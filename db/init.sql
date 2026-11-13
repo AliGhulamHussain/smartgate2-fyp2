@@ -178,7 +178,8 @@ CREATE INDEX idx_embeddings_org_emp ON recognition.face_embeddings (organization
 
 CREATE TABLE recognition.org_settings (
     organization_id    uuid PRIMARY KEY,
-    match_threshold    real NOT NULL DEFAULT 0.6 CHECK (match_threshold > 0),
+    -- 0.5 since db/migrations/002_recognition_threshold.sql (stricter than face-api's 0.6).
+    match_threshold    real NOT NULL DEFAULT 0.5 CHECK (match_threshold > 0),
     liveness_required  boolean NOT NULL DEFAULT true,
     updated_at         timestamptz NOT NULL DEFAULT now()
 );
