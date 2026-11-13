@@ -106,8 +106,6 @@ export function drawFaceFrame(canvas, video, box, tone) {
   ctx.strokeStyle = tone;
   ctx.lineWidth = Math.max(3, w * 0.012);
   ctx.lineCap = "round";
-  ctx.shadowColor = tone;
-  ctx.shadowBlur = 18;
   ctx.beginPath();
   for (const [cx, cy, dx, dy] of [
     [x, y, 1, 1],

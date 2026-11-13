@@ -13,7 +13,8 @@
   --color-line: rgb(255 255 255 / 0.09);
   --color-line-strong: rgb(255 255 255 / 0.16);
 
-  --color-accent: #7cf0c5;
+  --color-accent: #9fd4c0;
+  --color-accent-hover: #b3ddcd;
   --color-accent-ink: #062018;
 
   --color-ok: #6ee7a8;
@@ -40,63 +41,25 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ambient background: slow light blobs + grain, behind everything. */
+/* Background: plain graphite with a faint neutral light from the top
+   and fine grain. No coloured glow. */
 .ambient {
   position: fixed;
   inset: 0;
   z-index: 0;
-  overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(1200px 700px at 85% -10%, rgb(124 240 197 / 0.07), transparent 60%),
-    radial-gradient(900px 600px at -10% 110%, rgb(124 196 250 / 0.06), transparent 60%),
+    radial-gradient(1400px 800px at 50% -20%, rgb(255 255 255 / 0.045), transparent 65%),
     var(--color-ink);
 }
-.ambient::before,
-.ambient::after,
-.ambient > i {
-  content: "";
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.5;
-  animation: drift 28s var(--ease-out-expo) infinite alternate;
-}
-.ambient::before {
-  width: 38vw;
-  height: 38vw;
-  left: 8%;
-  top: 6%;
-  background: rgb(124 240 197 / 0.16);
-}
-.ambient::after {
-  width: 32vw;
-  height: 32vw;
-  right: 4%;
-  bottom: 2%;
-  background: rgb(124 196 250 / 0.13);
-  animation-duration: 34s;
-  animation-direction: alternate-reverse;
-}
-.ambient > i {
-  width: 24vw;
-  height: 24vw;
-  left: 45%;
-  top: 40%;
-  background: rgb(251 191 98 / 0.07);
-  animation-duration: 40s;
-}
+.ambient > i { display: none; }
 .grain {
   position: fixed;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.05;
+  opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-@keyframes drift {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(6vw, 4vh, 0) scale(1.12); }
 }
 
 /* Liquid glass surface: translucent fill, saturated blur, a 1px inner
@@ -144,7 +107,7 @@ body {
   outline-offset: 2px;
 }
 
-::selection { background: rgb(124 240 197 / 0.3); }
+::selection { background: rgb(159 212 192 / 0.3); }
 
 /* Calm scrollbars on dark glass. */
 * { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.14) transparent; }

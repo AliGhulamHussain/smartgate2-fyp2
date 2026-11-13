@@ -11,7 +11,7 @@ export const TONE_HEX = {
   bad: "#fb7185",
   info: "#7cc4fa",
   idle: "#94a3b8",
-  accent: "#7cf0c5",
+  accent: "#9fd4c0",
 };
 
 const TONE_CLASS = {
@@ -46,7 +46,7 @@ export function Logo({ className, alt = "" }) {
       width={256}
       height={256}
       draggable={false}
-      className={cx("shrink-0 rounded-[28%] ring-1 ring-inset ring-white/10 shadow-[0_6px_20px_-8px_rgb(124_240_197/0.45)]", className)}
+      className={cx("shrink-0 rounded-[28%] ring-1 ring-inset ring-white/10", className)}
     />
   );
 }
@@ -75,7 +75,7 @@ export function PageHeader({ title, description, actions }) {
 
 const BUTTON = {
   primary:
-    "bg-accent text-accent-ink hover:bg-[#99f5d4] shadow-[0_8px_24px_-10px_rgb(124_240_197/0.6),inset_0_1px_0_rgb(255_255_255/0.5)]",
+    "bg-accent text-accent-ink hover:bg-accent-hover shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]",
   glass: "glass text-fg hover:bg-white/10",
   ghost: "text-fg-2 hover:text-fg hover:bg-white/6",
   danger: "bg-bad/12 text-bad ring-1 ring-bad/30 hover:bg-bad/20",

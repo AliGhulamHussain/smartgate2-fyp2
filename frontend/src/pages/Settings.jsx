@@ -191,7 +191,7 @@ function Recognition() {
         step={0.01}
         value={threshold}
         onChange={(e) => setForm((f) => ({ ...f, match_threshold: e.target.value }))}
-        className="mt-5 w-full cursor-pointer accent-[#7cf0c5]"
+        className="mt-5 w-full cursor-pointer accent-[#9fd4c0]"
       />
       <div className="mt-1 flex justify-between text-xs text-fg-3"><span>Strict</span><span>Lenient</span></div>
 

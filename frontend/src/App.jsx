@@ -139,7 +139,7 @@ function TopNav({ items, active }) {
         {can("kiosk") && (
           <a
             href="#/kiosk"
-            className="hidden h-10 items-center gap-2 rounded-full bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-colors duration-200 hover:bg-[#99f5d4] sm:flex"
+            className="hidden h-10 items-center gap-2 rounded-full bg-accent px-4 text-[13px] font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover sm:flex"
           >
             <ScanFace className="size-4" aria-hidden />
             Kiosk
