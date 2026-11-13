@@ -343,10 +343,75 @@ function checkOutStatus({ localTime, workEnd, workingDay }) {
   return "normal";
 }
 
+// Optional query-string text; empty means "not given".
+function readQueryText(value, name, max) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.trim().length > max) {
+    fail(400, `${name} must be text of at most ${max} characters.`);
+  }
+  return value.trim() || undefined;
+}
+
+function readPositiveInt(value, name, fallback, max) {
+  if (value === undefined) {
+    return fallback;
+  }
+  const number = Number(value);
+  if (!/^\d+$/.test(String(value)) || number < 1 || number > max) {
+    fail(400, `${name} must be an integer from 1 to ${max}.`);
+  }
+  return number;
+}
+
+// Optional query-string date in YYYY-MM-DD form that must be a real date.
+function readDate(value, name) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    Number.isNaN(Date.parse(`${value}T00:00:00Z`)) ||
+    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value
+  ) {
+    fail(400, `${name} must be a valid date in YYYY-MM-DD format.`);
+  }
+  return value;
+}
+
+// Optional query-string value that must be one of a fixed list.
+function readChoice(value, name, choices) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!choices.includes(value)) {
+    fail(400, `${name} must be one of: ${choices.join(", ")}.`);
+  }
+  return value;
+}
+
+// Optional query-string UUID.
+function readQueryUuid(value, name) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!validUuid(value)) {
+    fail(400, `${name} must be a valid UUID.`);
+  }
+  return value;
+}
+
 module.exports = {
   asyncHandler,
   fail,
   validUuid,
+  readQueryText,
+  readPositiveInt,
+  readDate,
+  readChoice,
+  readQueryUuid,
   readPolicy,
   readEmployee,
   readGate,

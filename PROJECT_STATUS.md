@@ -52,13 +52,13 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | pgvector | Verified | Extension version 0.8.6 |
 | Database role isolation | Verified | All four service roles can access only their own schemas |
 | Redis | Verified, unused | Redis 7.4.11; zero keys and no streams yet |
-| API Gateway | Implemented and live-tested | Auth, user-management, attendance-policy, employee and gate mappings |
+| API Gateway | Implemented and live-tested | Auth, user-management and all public Attendance mappings |
 | Auth Service | Implemented and live-tested | Authentication, sessions, RBAC and tenant isolation |
-| Attendance Service | Partially implemented | Policy, employee, gate APIs and internal punch processing completed |
+| Attendance Service | Partially implemented | Policy, employee, gate, punch processing and monitoring APIs completed |
 | Recognition Service | Not implemented | Directory is empty; database schema exists |
 | Alerts Service | Not implemented | Directory is empty; database schema exists |
 | React frontend | Not implemented | Directory is empty |
-| Automated tests | Started | Sixteen unit tests (validation and punch rules) plus live integration checks |
+| Automated tests | Started | Eighteen unit tests (validation, query parsing and punch rules) plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
 ## Database Source of Truth
@@ -143,6 +143,10 @@ These counts describe the local development volume and are not fixtures.
 - `POST /api/attendance/gates`
 - `GET /api/attendance/gates/:id`
 - `PATCH /api/attendance/gates/:id`
+- `GET /api/attendance/presence`
+- `GET /api/attendance/logs`
+- `GET /api/attendance/daily`
+- `GET /api/attendance/stats`
 
 Implemented Auth behavior:
 
@@ -185,6 +189,13 @@ Implemented punch processing:
 - Each check-in/out writes `attendance.attendance_logs` and updates `employees.presence`
 - `attendance.daily_attendance` gets one row per employee/day on first check-in (`present` or `late`); each check-out sets `last_check_out` and adds the visit's minutes to `total_minutes`
 - Forgotten check-outs: a job every minute moves employees outside once `auto_close_time` passes (or the check-in was on an earlier day) and marks that day `incomplete`; the punch path also closes such sessions first. No fake check-out log is written
+
+Implemented monitoring (read-only, all organization roles, organization-scoped, `409` when no policy exists for `logs`/`daily`/`stats`):
+
+- `presence`: `active_employees`, `inside` count and the inside employees with check-in time and gate name
+- `logs`: punch history with employee and gate names; filters `from`/`to` (inclusive dates in the policy timezone), `employee_id`, `gate_id`, `action`, `status`; `page`, `limit` (default 50, max 200)
+- `daily`: one record per employee for `date` (default today, no future dates) with `day_type` (`working`/`weekend`/`holiday`), a status `summary`, and filters `status`, `department`, `page`, `limit`. Employees without a row are `absent` on working days, otherwise `weekend`/`holiday`. Employees created after the date are excluded; inactive employees appear only if they have a row
+- `stats`: today's date, `active_employees`, `inside_now`, today's present/late/incomplete/absent counts and a 7-day `trend` using the same absent rule
 
 ## Verified Runtime Behavior
 
@@ -247,13 +258,24 @@ Punch processing verified on 2026-11-13 (37 live checks, run twice, all passed; 
 - Employee (50) and gate (41) checks re-run and passed; Attendance refuses to start with a short internal key
 - Temporary data removed; all counts returned to baseline, with zero attendance logs, daily rows and holidays
 
+Monitoring verified on 2026-11-13 through the gateway (37 live checks, all passed):
+
+- Missing token `401`; no policy `409`; viewers can read every monitoring endpoint
+- Presence counts, inside list and gate names; organization isolation for presence, logs and stats
+- Log date-range, status, employee filters and pagination; bad dates, `from` after `to` and bad UUIDs return `400`
+- Daily summary for today (late, present, absent), status/department filters, pagination, inactive employees excluded
+- Past dates exclude employees created later; holiday and weekend days report `holiday`/`weekend` instead of absent; future dates `400`
+- Stats headline, today counts and 7-day trend (holiday not absent, no absences before employees existed)
+- Employee, gate and punch suites re-run and passed; temporary data removed and counts returned to baseline
+
 ## Known Gaps and Risks
 
 - There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
 - Database service-role development passwords are embedded in `db/init.sql`.
 - Duplicate camera events are handled by a per-employee cooldown, not an idempotency key. A person standing at a `both` gate longer than the cooldown is toggled; the kiosk/Recognition should also debounce.
 - Overnight shifts (`work_end` before `work_start`) are not supported for lateness, early-leave or work-date assignment.
-- Absent, weekend and holiday days are not stored as rows yet; daily rows exist only for days with a check-in. Reports must treat missing working days as absent.
+- Absent, weekend and holiday days are not stored as rows; `daily` and `stats` compute them at read time. Employee activation history is not tracked, so a deactivated employee's past absences disappear from historical reports.
+- `presence` is not paginated (fine for hundreds of people inside at once).
 - Holidays have no API yet; rows can only be added directly in the database.
 - `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
 - Redis stream names and consumer behavior are not defined.
@@ -263,12 +285,13 @@ Punch processing verified on 2026-11-13 (37 live checks, run twice, all passed; 
 
 ## Immediate Next Task
 
-Attendance monitoring and statistics APIs in the Attendance Service (read-only, through the gateway, organization-scoped):
+Start the Recognition Service (`services/recognition-service`, planned port `4003`):
 
-- Current presence (who is inside now, counts)
-- Attendance log history with date range, employee and gate filters and pagination
-- Daily attendance for a date, including employees with no row as absent on working days
-- Simple dashboard statistics (present, late, absent, inside counts for today)
+- Express foundation, health endpoint, restricted `recognition_svc` database connection, bearer verification through Auth
+- Face enrollment: store 128-dimensional embeddings in `recognition.face_embeddings` for an Attendance employee (verify the employee through an Attendance API, never by reading the Attendance schema)
+- Matching with pgvector L2 distance (`<->`) and the 0.6 default threshold, recording `recognition.recognition_events`
+- On a match, call Attendance `POST /internal/punch` with `X-Internal-Key`
+- Decide how `face_enrolled` on the Attendance employee is updated (an internal Attendance endpoint is the likely answer)
 
 ## Schema and Migration History
 
@@ -283,7 +306,7 @@ Attendance monitoring and statistics APIs in the Attendance Service (read-only, 
 3. Completed: Gate CRUD and gate-status migration
 4. Completed: Internal punch endpoint and duplicate protection
 5. Completed: Check-in/check-out, lateness, presence and daily summaries
-6. Attendance monitoring and statistics APIs
+6. Completed: Attendance monitoring and statistics APIs
 7. Recognition Service and embedding registration/matching
 8. Unknown-face event flow and Alerts Service
 9. React dashboard and kiosk

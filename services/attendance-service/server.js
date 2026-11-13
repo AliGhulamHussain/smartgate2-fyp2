@@ -27,6 +27,7 @@ const policyRoutes = require("./routes/policy");
 const employeeRoutes = require("./routes/employees");
 const gateRoutes = require("./routes/gates");
 const internalRoutes = require("./routes/internal");
+const monitoringRoutes = require("./routes/monitoring");
 
 const app = express();
 
@@ -71,6 +72,8 @@ app.get(
 app.use("/api/attendance/policy", policyRoutes);
 app.use("/api/attendance/employees", employeeRoutes);
 app.use("/api/attendance/gates", gateRoutes);
+// /presence, /logs, /daily and /stats
+app.use("/api/attendance", monitoringRoutes);
 
 // Service-to-service routes; the gateway must never expose these.
 app.use("/internal", internalRoutes);

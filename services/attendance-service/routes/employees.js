@@ -5,7 +5,14 @@ const {
   requireOrganization,
   allowRoles,
 } = require("../middleware/auth");
-const { asyncHandler, fail, validUuid, readEmployee } = require("../utils");
+const {
+  asyncHandler,
+  fail,
+  validUuid,
+  readEmployee,
+  readQueryText,
+  readPositiveInt,
+} = require("../utils");
 
 const router = express.Router();
 
@@ -28,27 +35,6 @@ function readId(req) {
     fail(400, "Employee id must be a valid UUID.");
   }
   return req.params.id;
-}
-
-function readQueryText(value, name, max) {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim().length > max) {
-    fail(400, `${name} must be text of at most ${max} characters.`);
-  }
-  return value.trim() || undefined;
-}
-
-function readPositiveInt(value, name, fallback, max) {
-  if (value === undefined) {
-    return fallback;
-  }
-  const number = Number(value);
-  if (!/^\d+$/.test(String(value)) || number < 1 || number > max) {
-    fail(400, `${name} must be an integer from 1 to ${max}.`);
-  }
-  return number;
 }
 
 router.get(

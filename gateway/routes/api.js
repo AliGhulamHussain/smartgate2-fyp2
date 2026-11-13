@@ -96,4 +96,10 @@ router.post("/api/attendance/gates", authenticate, attendanceProxy);
 router.get("/api/attendance/gates/:id", authenticate, attendanceProxy);
 router.patch("/api/attendance/gates/:id", authenticate, attendanceProxy);
 
+// Read-only monitoring.
+router.get("/api/attendance/presence", authenticate, attendanceProxy);
+router.get("/api/attendance/logs", authenticate, attendanceProxy);
+router.get("/api/attendance/daily", authenticate, attendanceProxy);
+router.get("/api/attendance/stats", authenticate, attendanceProxy);
+
 module.exports = router;
