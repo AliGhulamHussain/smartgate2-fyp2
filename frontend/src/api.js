@@ -1,0 +1,110 @@
+// Native fetch() client for the API Gateway (through the Vite /api proxy).
+// The access token lives only in memory; the HttpOnly refresh cookie
+// restores the session after a reload.
+import { useCallback, useEffect, useRef, useState } from "react";
+
+let accessToken = null;
+let sessionLost = () => {};
+let refreshing = null;
+
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function setAccessToken(token) {
+  accessToken = token;
+}
+
+export function onSessionLost(callback) {
+  sessionLost = callback;
+}
+
+// One refresh at a time, even when several requests hit 401 together.
+export function refreshSession() {
+  refreshing ??= fetch("/api/auth/refresh", { method: "POST" })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const data = await response.json();
+      accessToken = data.accessToken;
+      return data;
+    })
+    .catch(() => null)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+export async function api(path, { method = "GET", body, raw = false, retry = true } = {}) {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (response.status === 401 && retry && accessToken) {
+    if (await refreshSession()) return api(path, { method, body, raw, retry: false });
+    sessionLost();
+  }
+
+  if (raw && response.ok) return response;
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Some responses (images, empty bodies) are not JSON.
+  }
+
+  if (!response.ok) {
+    throw new ApiError(data?.message || `Request failed (${response.status}).`, response.status);
+  }
+  return data;
+}
+
+// Builds "?a=1&b=2" from an object, skipping empty values.
+export function query(params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") search.set(key, value);
+  }
+  const text = search.toString();
+  return text ? `?${text}` : "";
+}
+
+// Loads `path` and reloads when it changes. `refreshMs` polls in the
+// background without showing the loading state again.
+export function useApi(path, { refreshMs } = {}) {
+  const [state, setState] = useState({ data: null, error: null, loading: Boolean(path) });
+  const current = useRef(path);
+  current.current = path;
+
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!path) return;
+      if (!quiet) setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        const data = await api(path);
+        if (current.current === path) setState({ data, error: null, loading: false });
+      } catch (error) {
+        if (current.current === path) setState((s) => ({ data: quiet ? s.data : null, error, loading: false }));
+      }
+    },
+    [path]
+  );
+
+  useEffect(() => {
+    load();
+    if (!refreshMs) return undefined;
+    const timer = setInterval(() => load(true), refreshMs);
+    return () => clearInterval(timer);
+  }, [load, refreshMs]);
+
+  return { ...state, reload: load };
+}

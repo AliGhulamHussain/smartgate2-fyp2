@@ -39,7 +39,7 @@ Deferred:
 | Alerts Service | Windows, `127.0.0.1:4004` | Unknown faces, notifications, audit logs and Redis Stream consumption |
 | PostgreSQL + pgvector | Docker, host port `5433` | Persistent service-specific schemas |
 | Redis | Docker, host port `6379` | Redis Streams and asynchronous events |
-| React frontend | Planned, expected port `5173` | Dashboard and gate kiosk |
+| React frontend | Vite dev server, `localhost:5173` | Dashboard and gate kiosk; `/api` proxied to the gateway |
 
 Normal frontend traffic must go through the API Gateway. Internal service endpoints such as `POST /internal/punch` must not be exposed by the gateway.
 
@@ -57,7 +57,7 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | Attendance Service | Implemented and live-tested | Policy, employee, gate, punch processing and monitoring APIs |
 | Recognition Service | Implemented and live-tested | Enrollment, identification with pgvector, settings, Attendance punch integration |
 | Alerts Service | Implemented and live-tested | Unknown-face alerts with snapshots, recipients, queued notifications, audit log |
-| React frontend | Not implemented | Directory is empty |
+| React frontend | Implemented and browser-tested | Dashboard, all management screens, face enrollment and gate kiosk |
 | Automated tests | Started | 18 Attendance, 6 Recognition and 5 Alerts unit tests plus live integration checks |
 | Documentation | In progress | This is the first repository status document |
 
@@ -238,6 +238,16 @@ Implemented Alerts behavior:
 - Recipients (`org_admin`): email plus subscribed `alert_types`; duplicates `409`
 - Notification log and audit log (`org_admin`); reviews and recipient changes are audited with the acting user
 
+Implemented frontend (`frontend/`, React JSX, Tailwind CSS 4, Lucide React, Recharts, native `fetch()`, `@vladmandic/face-api`):
+
+- Liquid-glass dark design system in `src/index.css` (tokens, translucent blurred surfaces with specular edge, ambient light, grain) and `src/ui.jsx` (buttons, fields, badges, tables, modals, toasts, pagination); Geist / Geist Mono; reduced-motion respected; visible focus rings; 44px targets
+- Session: access token in memory, refresh-cookie restore on reload, automatic single refresh-and-retry on `401`; Vite proxies `/api` to the gateway so the refresh cookie stays first-party
+- Role-aware navigation (admin, manager, gate operator, viewer) matching backend permissions
+- Screens: login and organization sign-up; overview (stat tiles, 7-day stacked trend, inside now, recent activity, unknown faces); presence (live); attendance (daily report with filters and summary, gate history); employees (search, filters, create/edit, deactivate, face enrollment); gates; alerts (unknown-face gallery and review, recipients, notifications, audit log); settings (attendance policy, recognition threshold and blink switch, team members)
+- Face enrollment: webcam, 5 automatic consistent samples, distance check against the first sample, replace or remove face data
+- Gate kiosk (`#/kiosk/<gateId>`): full screen, live clock, 3 consecutive same-person frames, adaptive eye-aspect-ratio blink check, averaged descriptor, JPEG face snapshot for unknown faces, result cards (welcome/late/goodbye/already recorded/not recognized), ignores the person just identified while they walk through
+- face-api and TensorFlow.js are code-split into the kiosk and enrollment chunks; models are copied from `node_modules` to `public/models` by `npm run dev`/`build` (not committed); networks are warmed up while the starting screen is shown
+
 ## Verified Runtime Behavior
 
 Verified on 2026-11-10 without creating new application data:
@@ -331,6 +341,15 @@ Unknown-face flow and Alerts verified on 2026-11-13 through the gateway (45 live
 - All other live suites re-run and passed (Auth's in-memory signup rate limit returned `429` when every suite ran back to back; restarting Auth reset it)
 - All temporary rows, snapshot files, Redis cooldown keys and stream entries removed; every table returned to baseline
 
+Frontend verified on 2026-11-13 in Microsoft Edge (Playwright, fake camera) against all live services with a seeded temporary organization:
+
+- Production build succeeds; every screen rendered and reviewed at 1440px and 390px; no horizontal overflow on mobile
+- Login, session restore after reload, sign-out, and gate-operator navigation limited to Overview, Presence, Gates, Alerts and Kiosk
+- Overview stats, trend chart, presence, activity and authenticated snapshot thumbnails load with real data
+- Face models load and warm up; enrollment reaches live capture; the kiosk starts the camera and runs its scan loop with no page errors
+- Bugs found and fixed during this check: face-api thenable without `.catch()`, a camera stream that could start after its screen closed, and the timezone select silently showing the wrong zone when the saved value (`UTC`) was missing from the browser list
+- Temporary organization and all its rows, snapshots and Redis entries removed; database returned to baseline
+
 ## Known Gaps and Risks
 
 - There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
@@ -347,6 +366,9 @@ Unknown-face flow and Alerts verified on 2026-11-13 through the gateway (45 live
 - Failed stream events are retried only when the Alerts Service restarts and are never dead-lettered.
 - Auth's signup rate limit is per process and in memory; integration runs that create many organizations must space themselves out or restart Auth.
 - The 0.5 threshold and 0.05 margin are starting values and must be tuned with real cameras during demo testing.
+- The kiosk and enrollment have not been exercised with a real face yet (headless testing uses a synthetic camera); blink thresholds (0.7/0.85 of the open-eye ratio) may need tuning on real hardware.
+- First face detection compiles GPU shaders (about 1 s with a GPU, 10-25 s in software rendering); the kiosk shows the starting state meanwhile.
+- The main dashboard bundle is about 676 KB (Recharts and React); further splitting is possible if load time matters.
 - Holidays have no API yet; rows can only be added directly in the database.
 - `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
 - Redis stream names and consumer behavior are not defined.
@@ -356,14 +378,25 @@ Unknown-face flow and Alerts verified on 2026-11-13 through the gateway (45 live
 
 ## Immediate Next Task
 
-React dashboard and gate kiosk in `frontend/` (Vite, React JSX, Tailwind CSS, Lucide React, Recharts, native `fetch()`), port `5173`, all traffic through the gateway:
+End-to-end testing with a real webcam and two organizations:
 
-- Login with access token in memory and refresh-cookie rotation
-- Dashboard from `/api/attendance/stats` and `/presence` with a 7-day Recharts trend
-- Employees, gates, policy, users, daily attendance and logs screens
-- Face enrollment screen using `@vladmandic/face-api` (3-5 samples per employee)
-- Gate kiosk: webcam, face-api descriptor, 2-3 consecutive matching frames, blink liveness check, snapshot on unknown faces, result display
-- Unknown-face review screen with snapshots, recipients and audit log
+- Enroll real faces, tune `match_threshold`, margin and blink thresholds, and confirm check-in, late, check-out, cooldown and unknown-face alerts at a real kiosk
+- Repeat with a second organization to confirm isolation through the UI
+- Then: demo data script, architecture and sequence diagrams, API documentation, report and presentation
+
+## How to Run
+
+```
+docker compose up -d
+cd services/auth-service && npm start          # 4001
+cd services/attendance-service && npm start    # 4002
+cd services/recognition-service && npm start   # 4003
+cd services/alerts-service && npm start        # 4004
+cd gateway && npm start                        # 4000
+cd frontend && npm install && npm run dev      # http://localhost:5173
+```
+
+Open `http://localhost:5173` (use `localhost`, not `127.0.0.1`, so the camera and refresh cookie work). Register an organization, set the attendance policy in Settings, add gates and employees, enroll faces, then open the kiosk from the navigation bar.
 
 ## Schema and Migration History
 
@@ -382,7 +415,7 @@ React dashboard and gate kiosk in `frontend/` (Vite, React JSX, Tailwind CSS, Lu
 6. Completed: Attendance monitoring and statistics APIs
 7. Completed: Recognition Service and embedding registration/matching
 8. Completed: Unknown-face event flow and Alerts Service
-9. React dashboard and kiosk
+9. Completed: React dashboard and kiosk
 10. End-to-end multi-tenant testing
 11. Demo data, diagrams, API documentation, report and presentation
 
