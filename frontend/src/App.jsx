@@ -32,7 +32,6 @@ function Background() {
       <div className="ambient" aria-hidden>
         <i />
       </div>
-      <div className="grain" aria-hidden />
     </>
   );
 }

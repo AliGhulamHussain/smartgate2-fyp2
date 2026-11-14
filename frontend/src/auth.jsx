@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, onSessionLost, refreshSession, setAccessToken } from "./api";
+import { api, clearApiCache, onSessionLost, refreshSession, setAccessToken } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   const [status, setStatus] = useState("loading");
 
   const signOutLocally = useCallback(() => {
+    clearApiCache();
     setAccessToken(null);
     setUser(null);
     setStatus("out");
@@ -35,6 +36,7 @@ export function AuthProvider({ children }) {
   }, [signOutLocally]);
 
   const startSession = useCallback((session) => {
+    clearApiCache();
     setAccessToken(session.accessToken);
     setUser(session.user);
     setStatus("in");

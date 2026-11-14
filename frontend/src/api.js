@@ -78,29 +78,48 @@ export function query(params) {
   return text ? `?${text}` : "";
 }
 
+// Last response per path. Revisiting a page shows this instantly and
+// refreshes it in the background (stale-while-revalidate), so navigation
+// never flashes loading skeletons for data already seen.
+const cache = new Map();
+
+export function clearApiCache() {
+  cache.clear();
+}
+
 // Loads `path` and reloads when it changes. `refreshMs` polls in the
 // background without showing the loading state again.
 export function useApi(path, { refreshMs } = {}) {
-  const [state, setState] = useState({ data: null, error: null, loading: Boolean(path) });
+  const [state, setState] = useState(() => ({
+    data: cache.get(path) ?? null,
+    error: null,
+    loading: Boolean(path) && !cache.has(path),
+  }));
   const current = useRef(path);
   current.current = path;
 
   const load = useCallback(
     async (quiet = false) => {
       if (!path) return;
-      if (!quiet) setState((s) => ({ ...s, loading: true, error: null }));
+      // With cached data, refresh quietly instead of showing skeletons.
+      const cached = cache.get(path);
+      if (cached !== undefined) setState({ data: cached, error: null, loading: false });
+      else if (!quiet) setState((s) => ({ ...s, loading: true, error: null }));
       try {
         const data = await api(path);
+        cache.set(path, data);
         if (current.current === path) setState({ data, error: null, loading: false });
       } catch (error) {
-        if (current.current === path) setState((s) => ({ data: quiet ? s.data : null, error, loading: false }));
+        if (current.current === path) {
+          setState((s) => ({ data: quiet || cached !== undefined ? s.data : null, error, loading: false }));
+        }
       }
     },
     [path]
   );
 
   useEffect(() => {
-    load();
+    load(cache.has(path));
     if (!refreshMs) return undefined;
     const timer = setInterval(() => load(true), refreshMs);
     return () => clearInterval(timer);

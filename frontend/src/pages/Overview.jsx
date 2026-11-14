@@ -223,7 +223,7 @@ function TrendChart({ data }) {
             fill={series.color}
             fillOpacity={0.85}
             radius={i === SERIES.length - 1 ? [6, 6, 0, 0] : 0}
-            animationDuration={700}
+            isAnimationActive={false}
           />
         ))}
       </BarChart>

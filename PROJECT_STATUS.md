@@ -368,6 +368,7 @@ Frontend verified on 2026-11-13 in Microsoft Edge (Playwright, fake camera) agai
 - The 0.5 threshold and 0.05 margin are starting values and must be tuned with real cameras during demo testing.
 - The kiosk and enrollment have not been exercised with a real face yet (headless testing uses a synthetic camera); blink thresholds (0.7/0.85 of the open-eye ratio) may need tuning on real hardware.
 - First face detection compiles GPU shaders (about 1 s with a GPU, 10-25 s in software rendering); the kiosk shows the starting state meanwhile.
+- Performance (2026-11-14, production build): sign-in and first load 2.8 s, page switches 56-134 ms, 60 fps idle and scrolling. Pages keep their last data and refresh it in the background; the cache is cleared on sign-in and sign-out. Glass blur was reduced and the full-screen grain layer removed to lighten rendering.
 - The main dashboard bundle is about 676 KB (Recharts and React); further splitting is possible if load time matters.
 - Holidays have no API yet; rows can only be added directly in the database.
 - `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
@@ -393,8 +394,10 @@ cd services/attendance-service && npm start    # 4002
 cd services/recognition-service && npm start   # 4003
 cd services/alerts-service && npm start        # 4004
 cd gateway && npm start                        # 4000
-cd frontend && npm install && npm run dev      # http://localhost:5173
+cd frontend && npm install && npm start        # fast production build on http://localhost:5173
 ```
+
+Use `npm run dev` only while editing frontend code: dev mode serves hundreds of unbundled files and is several times slower (about 8.7 s versus 2.8 s to load and sign in).
 
 Open `http://localhost:5173` (use `localhost`, not `127.0.0.1`, so the camera and refresh cookie work). Register an organization, set the attendance policy in Settings, add gates and employees, enroll faces, then open the kiosk from the navigation bar.
 
