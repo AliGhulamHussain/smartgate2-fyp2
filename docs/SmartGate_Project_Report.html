@@ -211,7 +211,7 @@
     <dt>Supervisor</dt><dd>Sir Muhammad Irfan</dd>
     <dt>Member 1</dt><dd>Ali Ghulam Hussain – 2K23/BLCS/10</dd>
     <dt>Member 2</dt><dd>Awais Shakoor – 2K23/BLCS/14</dd>
-    <dt>Report date</dt><dd>15 November 2026</dd>
+    <dt>Report date</dt><dd>15 November 2026 (updated the same evening)</dd>
   </dl>
 </header>
 
@@ -639,7 +639,8 @@
   <ul>
     <li>Shows a live clock and the camera feed.</li>
     <li>Needs the same person in <strong>3 consecutive frames</strong> before acting.</li>
-    <li>Runs an <strong>adaptive blink check</strong> using the eye aspect ratio (how open the eyes are).</li>
+    <li>Runs an <strong>adaptive blink check</strong> using the eye aspect ratio (how open the eyes are). The kiosk learns how open this person's eyes normally are; a blink is when they drop below <strong>80%</strong> of that and come back above <strong>90%</strong>. The screen says <em>"Blink slowly"</em>.</li>
+    <li>While waiting for the blink it skips the slow descriptor model and only checks the eyes, about every 20 ms, so a quick blink is not missed. Right after the blink it reads the face once more to confirm it is the same person.</li>
     <li>Averages the descriptors, takes a small JPEG of the face, and sends them to <code>/api/recognition/identify</code>.</li>
     <li>Shows a result card: <em>Welcome</em>, <em>Late</em>, <em>Goodbye</em>, <em>Already recorded</em> or <em>Not recognised</em>.</li>
     <li>Ignores the person it just identified while they walk away.</li>
@@ -679,7 +680,7 @@
 
   <h3>D. A known employee arrives at the gate</h3>
   <ol class="steps">
-    <li>Kiosk detects a face in 3 frames in a row and the person blinks.</li>
+    <li>Kiosk detects a face in 3 frames in a row and the person blinks (the kiosk checks only the eyes, very quickly, until the blink is seen).</li>
     <li>Kiosk sends descriptor + gate ID + liveness result + snapshot to <code>POST /api/recognition/identify</code> (via Vite and the gateway).</li>
     <li>Recognition finds the nearest employee using pgvector. Distance 0.32 ≤ 0.5 and clearly better than the next person → match.</li>
     <li>Recognition calls Attendance <code>POST /internal/punch</code> with the secret key.</li>
@@ -769,6 +770,7 @@
 <pre><code>smartgate-platform/
 ├── .env / .env.example        shared configuration
 ├── docker-compose.yml         PostgreSQL + Redis containers
+├── start.bat                  starts everything at once (double-click)
 ├── PROJECT_STATUS.md          living status / handoff document
 ├── db/
 │   ├── init.sql               schemas, tables, roles, permissions
@@ -807,7 +809,17 @@
     <li>Copy <code>.env.example</code> to <code>.env</code> and fill in <code>JWT_SECRET</code> and <code>INTERNAL_SERVICE_KEY</code> with long random strings.</li>
     <li>Run <code>npm install</code> in <code>gateway</code>, each folder in <code>services</code>, and <code>frontend</code>.</li>
   </ol>
-  <h3>Every time</h3>
+  <h3>Every time: the quick way</h3>
+  <p>Double-click <code>start.bat</code> in the project folder. It:</p>
+  <ol>
+    <li>starts Docker Desktop if it is not running and waits for it,</li>
+    <li>runs <code>docker compose up -d</code> and waits until PostgreSQL is ready,</li>
+    <li>warns if another program is already using port 5173,</li>
+    <li>opens six windows: the four services, then the gateway, then the frontend,</li>
+    <li>opens <code>http://localhost:5173</code> in the browser once the frontend answers.</li>
+  </ol>
+  <p><strong>Stop:</strong> close the six windows, then run <code>docker compose down</code> (data is kept).</p>
+  <h3>Every time: by hand</h3>
 <pre><code>1. Start Docker Desktop
 2. docker compose up -d                                  (in the project folder)
 3. cd services\auth-service;        npm start           (terminal 1, port 4001)
@@ -857,12 +869,12 @@
     <tr><td>7</td><td>Recognition Service and face matching</td><td><span class="badge b-ok">Done</span></td></tr>
     <tr><td>8</td><td>Unknown-face flow and Alerts Service</td><td><span class="badge b-ok">Done</span></td></tr>
     <tr><td>9</td><td>React dashboard and kiosk</td><td><span class="badge b-ok">Done</span></td></tr>
-    <tr><td>10</td><td>End-to-end testing with a real webcam and two organisations</td><td><span class="badge b-warn">Next</span></td></tr>
-    <tr><td>11</td><td>Demo data, diagrams, API docs, report and presentation</td><td><span class="badge b-warn">Pending</span></td></tr>
+    <tr><td>10</td><td>End-to-end testing with a real webcam and two organisations</td><td><span class="badge b-warn">In progress</span>: a real employee is enrolled and recognised with a real webcam; blink check tuned</td></tr>
+    <tr><td>11</td><td>Demo data, diagrams, API docs, report and presentation</td><td><span class="badge b-warn">In progress</span>: report done, 18 demo employees added; diagrams and presentation pending</td></tr>
   </table></div>
 
   <h3>Known limitations</h3>
-  <div class="warn"><strong>To be tuned with real cameras</strong>The match threshold (0.5), margin (0.05) and blink thresholds are starting values. So far the kiosk has only been tested with a simulated camera.</div>
+  <div class="warn"><strong>To be tuned with more real cameras</strong>The match threshold (0.5), margin (0.05) and blink thresholds (80% / 90%) are starting values. The kiosk has now been tested with one real webcam and one person; more people, lighting and cameras are still to be tried.</div>
   <ul>
     <li>No email is actually sent yet: notifications are queued, waiting for an email (SMTP) sender. Only unknown-face notifications are produced.</li>
     <li>The blink check stops printed photos, but not a video replay or a modified client.</li>
@@ -875,6 +887,15 @@
     <li>Face search compares against every sample in the organisation; fine for thousands of samples. For much larger organisations, an HNSW index (already prepared in <code>init.sql</code> as a comment) can be enabled.</li>
     <li>Development database passwords are written in <code>db/init.sql</code>; a real deployment would use secrets.</li>
   </ul>
+
+  <h3>Changes after the first version of this report</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Change</th><th>Why</th></tr>
+    <tr><td>Every service and the frontend simplified (flat folders, one <code>helpers.js</code> per service, plain comments, shared <code>format.js</code> and <code>useAction</code> in the frontend)</td><td>Easier to read and explain. Behaviour was compared before and after and is identical.</td></tr>
+    <tr><td><code>start.bat</code> added</td><td>Starts the whole system with one double-click instead of six terminals.</td></tr>
+    <tr><td>Blink check made faster and easier to pass</td><td>With a real webcam the blink was often missed: each frame ran all three models (150–300 ms), longer than a blink. The kiosk now checks only the eyes while waiting, thresholds were loosened from 70%/85% to 80%/90%, and a small change in the face numbers during a blink no longer cancels it.</td></tr>
+    <tr><td>18 demo employees added to HRA Tech Academy (codes HRA-001 to HRA-018)</td><td>Realistic data for the demo; faces are enrolled later from the Employees screen.</td></tr>
+  </table></div>
 
   <h3>Future work</h3>
   <ul>
