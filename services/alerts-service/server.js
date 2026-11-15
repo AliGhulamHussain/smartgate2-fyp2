@@ -1,9 +1,11 @@
+// Alerts service: unknown-face alerts, notification recipients and logs.
 const path = require("path");
 
 require("dotenv").config({
   path: path.resolve(__dirname, "../../.env"),
 });
 
+// Stop early with a clear message if a setting is missing.
 for (const name of [
   "ALERTS_DATABASE_URL",
   "AUTH_SERVICE_URL",
@@ -18,22 +20,15 @@ const express = require("express");
 const cors = require("cors");
 const { pool } = require("./db");
 const { startConsumer, stopConsumer } = require("./consumer");
-const { asyncHandler } = require("./utils");
-const unknownFaceRoutes = require("./routes/unknown-faces");
-const recipientRoutes = require("./routes/recipients");
-const historyRoutes = require("./routes/history");
+const { asyncHandler } = require("./helpers");
 
 const app = express();
 
 app.disable("x-powered-by");
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_ORIGIN,
-    credentials: true,
-  })
-);
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN, credentials: true }));
 
+// Browsers may only call us from the SmartGate frontend.
 app.use((req, res, next) => {
   const origin = req.get("Origin");
 
@@ -63,15 +58,16 @@ app.get(
   })
 );
 
-app.use("/api/alerts/unknown-faces", unknownFaceRoutes);
-app.use("/api/alerts/recipients", recipientRoutes);
-// /notifications and /audit-logs
-app.use("/api/alerts", historyRoutes);
+app.use("/api/alerts/unknown-faces", require("./routes/unknown-faces").router);
+app.use("/api/alerts/recipients", require("./routes/recipients").router);
+app.use("/api/alerts", require("./routes/history").router); // notifications, audit-logs
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });
 });
 
+// Errors thrown with fail() are sent to the client as they are. Anything
+// else is logged and answered with a plain 500, so no details leak.
 app.use((error, req, res, next) => {
   if (res.headersSent) {
     return next(error);
@@ -94,9 +90,8 @@ app.use((error, req, res, next) => {
 });
 
 async function start() {
-  await pool.query("SELECT 1");
-  // Unknown-face events from the Recognition Service arrive through Redis.
-  await startConsumer();
+  await pool.query("SELECT 1"); // fail fast if the database is down
+  await startConsumer(); // start reading unknown-face events from Redis
 
   const port = Number(process.env.ALERTS_PORT || 4004);
   const host = process.env.ALERTS_HOST || "127.0.0.1";

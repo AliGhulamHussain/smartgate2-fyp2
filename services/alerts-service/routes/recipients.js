@@ -1,23 +1,50 @@
-// Email addresses that receive alert notifications. Admin only.
+// Email addresses that receive alert notifications. Admins only.
+// Adding and removing recipients is written to the audit log.
 const express = require("express");
 const { pool, transaction, audit } = require("../db");
-const {
-  authenticate,
-  requireOrganization,
-  allowRoles,
-} = require("../middleware/auth");
-const { asyncHandler, fail, validUuid, readRecipient } = require("../utils");
+const { authenticate, allowRoles } = require("../auth");
+const { asyncHandler, fail, isUuid, isObject } = require("../helpers");
 
 const router = express.Router();
+router.use(authenticate, allowRoles("org_admin"));
 
-router.use(authenticate, requireOrganization, allowRoles("org_admin"));
+const ALERT_TYPES = ["unknown_face", "late_arrival", "forgot_checkout", "daily_summary"];
 
+// Body: { email, alert_types? }. Without alert_types the recipient gets all types.
+function readRecipient(body) {
+  if (!isObject(body) || Object.keys(body).some((key) => !["email", "alert_types"].includes(key))) {
+    fail(400, "Body must be { email, alert_types? }.");
+  }
+
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (email.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    fail(400, "email must be a valid email address.");
+  }
+
+  let alertTypes = ALERT_TYPES;
+  if (body.alert_types !== undefined) {
+    const types = body.alert_types;
+    const valid =
+      Array.isArray(types) &&
+      types.length > 0 &&
+      types.every((type) => ALERT_TYPES.includes(type)) &&
+      new Set(types).size === types.length;
+
+    if (!valid) {
+      fail(400, `alert_types must be a non-empty list of: ${ALERT_TYPES.join(", ")}.`);
+    }
+    alertTypes = types;
+  }
+
+  return { email, alert_types: alertTypes };
+}
+
+// GET /api/alerts/recipients
 router.get(
   "/",
   asyncHandler(async (req, res) => {
     const result = await pool.query(
-      `SELECT id, email, alert_types
-       FROM alerts.notification_recipients
+      `SELECT id, email, alert_types FROM alerts.notification_recipients
        WHERE organization_id = $1
        ORDER BY email`,
       [req.user.organization_id]
@@ -27,6 +54,7 @@ router.get(
   })
 );
 
+// POST /api/alerts/recipients
 router.post(
   "/",
   asyncHandler(async (req, res) => {
@@ -41,6 +69,7 @@ router.post(
           [req.user.organization_id, recipient.email, recipient.alert_types]
         )
         .catch((error) => {
+          // 23505 = a UNIQUE rule was broken (same email twice).
           if (error.code === "23505") fail(409, "This email is already a recipient.");
           throw error;
         });
@@ -54,10 +83,11 @@ router.post(
   })
 );
 
+// DELETE /api/alerts/recipients/:id
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    if (!validUuid(req.params.id)) {
+    if (!isUuid(req.params.id)) {
       fail(400, "Recipient id must be a valid UUID.");
     }
 
@@ -81,4 +111,4 @@ router.delete(
   })
 );
 
-module.exports = router;
+module.exports = { router, readRecipient };

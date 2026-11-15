@@ -1,12 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {
-  validUuid,
-  uuidFromText,
-  readUnknownFaceEvent,
-  readReview,
-  readRecipient,
-} = require("../utils");
+const { isUuid } = require("../helpers");
+const { uuidFromText, readUnknownFaceEvent } = require("../consumer");
+const { readReview } = require("../routes/unknown-faces");
+const { readRecipient } = require("../routes/recipients");
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const GATE = "33333333-3333-4333-8333-333333333333";
@@ -25,7 +22,7 @@ const event = {
 test("uuidFromText is stable and UUID-shaped", () => {
   assert.equal(uuidFromText("a"), uuidFromText("a"));
   assert.notEqual(uuidFromText("a"), uuidFromText("b"));
-  assert.ok(validUuid(uuidFromText("smartgate:unknown-faces:1-0")));
+  assert.ok(isUuid(uuidFromText("smartgate:unknown-faces:1-0")));
 });
 
 test("readUnknownFaceEvent parses stream fields", () => {

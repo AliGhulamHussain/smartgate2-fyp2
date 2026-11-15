@@ -595,7 +595,7 @@
     <li><strong>Recipients:</strong> email addresses and the alert types they want.</li>
     <li><strong>Notifications log</strong> and <strong>audit log</strong> (reviews and recipient changes, with the acting user).</li>
   </ul>
-  <p><strong>Files:</strong> <code>consumer.js</code>, <code>routes/unknown-faces.js</code>, <code>routes/recipients.js</code>, <code>routes/history.js</code>, <code>test/alerts.test.js</code>.</p>
+  <p><strong>Files:</strong> <code>consumer.js</code> (reads the Redis stream and saves alerts), <code>routes/unknown-faces.js</code> (list, photo, review), <code>routes/recipients.js</code>, <code>routes/history.js</code> (notification and audit logs), <code>auth.js</code>, <code>helpers.js</code>, <code>db.js</code>, <code>test/alerts.test.js</code>.</p>
 </section>
 
 <!-- 12 -->
@@ -784,8 +784,8 @@
 │   │                          routes/policy, employees, gates, internal, monitoring + test/
 │   ├── recognition-service/   server.js, db.js, auth.js, helpers.js, matching.js,
 │   │                          attendance.js, events.js, routes/faces, identify, settings + test/
-│   └── alerts-service/        consumer.js, routes/unknown-faces, recipients, history + test/
-│       (alerts also has server.js, db.js, utils.js, middleware/auth.js)
+│   └── alerts-service/        server.js, db.js, auth.js, helpers.js, consumer.js,
+│                              routes/unknown-faces, recipients, history + test/
 └── frontend/
     ├── vite.config.js         dev server + /api proxy
     ├── scripts/copy-models.js copies face models to public/models

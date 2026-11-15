@@ -1,78 +1,69 @@
-// Read-only history: notification log and audit log. Admin only.
+// Read-only history for admins: the notification log and the audit log.
+// Both are paged and newest first.
 const express = require("express");
 const { pool } = require("../db");
-const {
-  authenticate,
-  requireOrganization,
-  allowRoles,
-} = require("../middleware/auth");
-const { asyncHandler, readPositiveInt, readChoice } = require("../utils");
+const { authenticate, allowRoles } = require("../auth");
+const { asyncHandler, readPositiveInt, readChoice } = require("../helpers");
 
 const router = express.Router();
+router.use(authenticate, allowRoles("org_admin"));
 
-router.use(authenticate, requireOrganization, allowRoles("org_admin"));
-
-// Pages through one organization-scoped table, newest first.
-async function page(req, sql, extraCondition, extraValue) {
-  const pageNumber = readPositiveInt(req.query.page, "page", 1, 100000);
+function readPaging(req) {
+  const page = readPositiveInt(req.query.page, "page", 1, 100000);
   const limit = readPositiveInt(req.query.limit, "limit", 50, 200);
-  const values = [req.user.organization_id];
-  let where = "organization_id = $1";
-
-  if (extraValue !== undefined) {
-    values.push(extraValue);
-    where += ` AND ${extraCondition} = $2`;
-  }
-
-  const result = await pool.query(
-    `${sql.replace("{where}", where)}
-     LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-    [...values, limit, (pageNumber - 1) * limit]
-  );
-
-  return {
-    rows: result.rows.map(({ total_rows, ...row }) => row),
-    page: pageNumber,
-    limit,
-    total: result.rows[0]?.total_rows ?? 0,
-  };
+  return { page, limit, offset: (page - 1) * limit };
 }
 
-// GET /api/alerts/notifications?status=queued|sent|failed
+// GET /api/alerts/notifications?status=queued|sent|failed&page=&limit=
 router.get(
   "/notifications",
   asyncHandler(async (req, res) => {
     const status = readChoice(req.query.status, "status", ["queued", "sent", "failed"]);
-    const { rows, ...paging } = await page(
-      req,
+    const { page, limit, offset } = readPaging(req);
+
+    // $2 is the optional status filter; NULL means "any status".
+    const result = await pool.query(
       `SELECT id, type, recipient, subject, payload, status, error, created_at, sent_at,
               COUNT(*) OVER ()::int AS total_rows
        FROM alerts.notifications
-       WHERE {where}
-       ORDER BY created_at DESC`,
-      "status",
-      status
+       WHERE organization_id = $1 AND ($2::text IS NULL OR status = $2)
+       ORDER BY created_at DESC
+       LIMIT $3 OFFSET $4`,
+      [req.user.organization_id, status ?? null, limit, offset]
     );
 
-    res.json({ notifications: rows, ...paging });
+    res.json({
+      notifications: result.rows.map(({ total_rows, ...row }) => row),
+      page,
+      limit,
+      total: result.rows[0]?.total_rows ?? 0,
+    });
   })
 );
 
-// GET /api/alerts/audit-logs
+// GET /api/alerts/audit-logs?page=&limit=
 router.get(
   "/audit-logs",
   asyncHandler(async (req, res) => {
-    const { rows, ...paging } = await page(
-      req,
+    const { page, limit, offset } = readPaging(req);
+
+    const result = await pool.query(
       `SELECT id, actor_user_id, action, entity_type, entity_id, details, created_at,
               COUNT(*) OVER ()::int AS total_rows
        FROM alerts.audit_logs
-       WHERE {where}
-       ORDER BY created_at DESC`
+       WHERE organization_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [req.user.organization_id, limit, offset]
     );
 
-    res.json({ audit_logs: rows, ...paging });
+    res.json({
+      audit_logs: result.rows.map(({ total_rows, ...row }) => row),
+      page,
+      limit,
+      total: result.rows[0]?.total_rows ?? 0,
+    });
   })
 );
 
-module.exports = router;
+module.exports = { router };
