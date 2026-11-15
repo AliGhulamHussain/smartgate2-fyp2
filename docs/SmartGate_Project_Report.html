@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartGate Project Report</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #f0f0ec;
+    --text: #1b1c1e;
+    --muted: #5d6066;
+    --border: #dddcd6;
+    --accent: #2f5fd0;
+    --accent-soft: #e6ecfb;
+    --ok: #1f7a4d;
+    --ok-soft: #e3f3ea;
+    --warn: #9a6100;
+    --warn-soft: #fbf0dc;
+    --code-bg: #f1f1ed;
+    --diagram-box: #ffffff;
+    --diagram-stroke: #8b8e95;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141518;
+      --surface: #1c1d21;
+      --surface-2: #24262b;
+      --text: #e9e9eb;
+      --muted: #a2a5ad;
+      --border: #33353b;
+      --accent: #7fa2ff;
+      --accent-soft: #232c45;
+      --ok: #6fd19d;
+      --ok-soft: #1c3127;
+      --warn: #f0b75a;
+      --warn-soft: #3a2e19;
+      --code-bg: #24262b;
+      --diagram-box: #1c1d21;
+      --diagram-stroke: #6d7079;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141518;
+    --surface: #1c1d21;
+    --surface-2: #24262b;
+    --text: #e9e9eb;
+    --muted: #a2a5ad;
+    --border: #33353b;
+    --accent: #7fa2ff;
+    --accent-soft: #232c45;
+    --ok: #6fd19d;
+    --ok-soft: #1c3127;
+    --warn: #f0b75a;
+    --warn-soft: #3a2e19;
+    --code-bg: #24262b;
+    --diagram-box: #1c1d21;
+    --diagram-stroke: #6d7079;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.88em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: var(--radius); overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  a { color: var(--accent); }
+
+  .layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); max-width: 1240px; margin: 0 auto; }
+  nav.toc {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 28px 18px; border-right: 1px solid var(--border); font-size: 14px;
+  }
+  nav.toc strong { display: block; margin-bottom: 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 5px 0; }
+  nav.toc a { color: var(--text); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+
+  main { padding: 32px 48px 80px; min-width: 0; }
+  section { margin-bottom: 56px; }
+  h1 { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.5rem; margin: 0 0 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.15rem; margin: 28px 0 8px; }
+  h4 { font-size: 1rem; margin: 20px 0 6px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+
+  .cover {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 32px; margin-bottom: 48px;
+  }
+  .cover .tag { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; }
+  .cover dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 22px 0 0; }
+  .cover dt { color: var(--muted); }
+  .cover dd { margin: 0; font-weight: 500; }
+
+  .table-wrap { overflow-x: auto; margin: 10px 0 18px; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 12px 0 18px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .card h4 { margin-top: 0; }
+  .card p { margin: 0; font-size: 14.5px; color: var(--muted); }
+
+  .note { background: var(--accent-soft); border-radius: var(--radius); padding: 12px 16px; margin: 12px 0 18px; }
+  .warn { background: var(--warn-soft); border-radius: var(--radius); padding: 12px 16px; margin: 12px 0 18px; }
+  .note strong, .warn strong { display: block; margin-bottom: 2px; }
+
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 10px 0 18px; }
+  ol.steps > li {
+    counter-increment: s; position: relative; padding: 2px 0 12px 42px;
+    border-left: 2px solid var(--border); margin-left: 13px;
+  }
+  ol.steps > li:last-child { border-left-color: transparent; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: -14px; top: 0;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--surface);
+    font-size: 13px; font-weight: 700; display: grid; place-items: center;
+  }
+
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 99px; }
+  .b-ok { background: var(--ok-soft); color: var(--ok); }
+  .b-warn { background: var(--warn-soft); color: var(--warn); }
+
+  figure { margin: 14px 0 22px; }
+  figure svg { width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; }
+  svg .box { fill: var(--diagram-box); stroke: var(--diagram-stroke); stroke-width: 1.4; }
+  svg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+  svg .box-data { fill: var(--surface-2); stroke: var(--diagram-stroke); stroke-width: 1.4; }
+  svg .t { fill: var(--text); font: 600 15px system-ui, sans-serif; }
+  svg .s { fill: var(--muted); font: 13px system-ui, sans-serif; }
+  svg .line { stroke: var(--diagram-stroke); stroke-width: 1.6; fill: none; }
+  svg .line-accent { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+  svg .dash { stroke-dasharray: 5 4; }
+  svg .arrowhead { fill: var(--diagram-stroke); }
+  svg .arrowhead-accent { fill: var(--accent); }
+
+  .theme-btn {
+    position: fixed; top: 14px; right: 16px; z-index: 5;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 20px 16px; }
+    main { padding: 24px 16px 60px; }
+    h1 { font-size: 1.7rem; }
+    .cover { padding: 22px; }
+  }
+  @media print {
+    nav.toc, .theme-btn { display: none; }
+    .layout { display: block; }
+    main { padding: 0; }
+    section { break-inside: auto; }
+    h2 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-btn" type="button" id="themeBtn" aria-label="Switch light or dark theme">Theme</button>
+
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#summary">Project summary</a></li>
+    <li><a href="#concepts">Key concepts explained</a></li>
+    <li><a href="#stack">Technology stack</a></li>
+    <li><a href="#architecture">System architecture</a></li>
+    <li><a href="#docker">Docker</a></li>
+    <li><a href="#database">Database</a></li>
+    <li><a href="#gateway">API Gateway</a></li>
+    <li><a href="#auth">Auth Service</a></li>
+    <li><a href="#attendance">Attendance Service</a></li>
+    <li><a href="#recognition">Recognition Service</a></li>
+    <li><a href="#alerts">Alerts Service</a></li>
+    <li><a href="#frontend">Frontend</a></li>
+    <li><a href="#flows">End-to-end flows</a></li>
+    <li><a href="#security">Security and multi-tenancy</a></li>
+    <li><a href="#roles">Roles and permissions</a></li>
+    <li><a href="#config">Configuration (.env)</a></li>
+    <li><a href="#structure">Folder structure</a></li>
+    <li><a href="#run">How to run</a></li>
+    <li><a href="#testing">Testing and verification</a></li>
+    <li><a href="#status">Status and limitations</a></li>
+    <li><a href="#api">Full API list</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="cover">
+  <div class="tag">Final Year Project · Technical Report</div>
+  <h1>SmartGate – AI-Powered Face Recognition Attendance &amp; Access Monitoring System</h1>
+  <p class="muted">A full explanation of how the system is built, what each part does, and how the parts work together.</p>
+  <dl>
+    <dt>Supervisor</dt><dd>Sir Muhammad Irfan</dd>
+    <dt>Member 1</dt><dd>Ali Ghulam Hussain – 2K23/BLCS/10</dd>
+    <dt>Member 2</dt><dd>Awais Shakoor – 2K23/BLCS/14</dd>
+    <dt>Report date</dt><dd>15 November 2026</dd>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section id="summary">
+  <h2>1. Project summary</h2>
+  <p><strong>SmartGate</strong> is a web platform that records attendance automatically using face recognition. A camera at a gate (a laptop or tablet running the <em>Gate Kiosk</em> screen) looks at the person, recognises who they are, and records a check-in or check-out. The system works out whether the person was late, who is inside the building right now, and builds a daily attendance report. When a face is not recognised, a photo is saved and an alert is raised for the administrators.</p>
+  <p>It is <strong>multi-tenant</strong>: many organisations (schools, universities, offices) can use the same installation, and each organisation sees only its own data.</p>
+
+  <h3>What the system does (MVP scope)</h3>
+  <div class="cards">
+    <div class="card"><h4>Organisations and users</h4><p>Sign-up for a new organisation, login, and five user roles with different permissions.</p></div>
+    <div class="card"><h4>Attendance policy</h4><p>Each organisation sets its working hours, grace minutes, working days and timezone.</p></div>
+    <div class="card"><h4>Employees and gates</h4><p>Add and manage employees and the physical gates (entry, exit or both).</p></div>
+    <div class="card"><h4>Face enrollment</h4><p>Capture a person's face through the webcam and store it as numbers, not as a photo.</p></div>
+    <div class="card"><h4>Automatic check-in/out</h4><p>The kiosk recognises a face and records attendance, lateness and early leave.</p></div>
+    <div class="card"><h4>Live presence and reports</h4><p>Who is inside now, daily reports, history and a 7-day trend chart.</p></div>
+    <div class="card"><h4>Unknown-face alerts</h4><p>Strangers are photographed, stored and listed for review by admins and managers.</p></div>
+    <div class="card"><h4>Dashboard and kiosk</h4><p>A React web dashboard for administration and a full-screen kiosk for gates.</p></div>
+  </div>
+  <p class="muted">Deliberately left out of the MVP: multiple shifts, payroll and leave management, manual attendance corrections, and exports.</p>
+</section>
+
+<!-- 2 -->
+<section id="concepts">
+  <h2>2. Key concepts explained</h2>
+  <p>These are the ideas the whole project is built on. Read this section first if any term in the report is unfamiliar.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Concept</th><th>Plain explanation</th><th>Where it is used</th></tr>
+    <tr><td><strong>Microservices</strong></td><td>Instead of one big program, the backend is split into small independent programs. Each one owns one job and its own data, and they talk to each other over the network.</td><td>Auth, Attendance, Recognition and Alerts services</td></tr>
+    <tr><td><strong>API</strong></td><td>A set of URLs a program exposes so other programs can ask it to do things, e.g. <code>GET /api/attendance/employees</code> returns the employee list as JSON.</td><td>Every service</td></tr>
+    <tr><td><strong>API Gateway</strong></td><td>The single front door of the backend. The browser only talks to the gateway; the gateway checks the user's login and forwards each request to the right service.</td><td><code>gateway/</code>, port 4000</td></tr>
+    <tr><td><strong>Docker</strong></td><td>A tool that runs software inside isolated "containers", so you don't have to install it on Windows directly. Each container is like a small, pre-configured machine.</td><td>PostgreSQL and Redis</td></tr>
+    <tr><td><strong>PostgreSQL</strong></td><td>A relational database: data is kept in tables with rows and columns and queried with SQL.</td><td>All permanent data</td></tr>
+    <tr><td><strong>Schema</strong></td><td>A named folder of tables inside one database. SmartGate has one schema per service.</td><td><code>auth</code>, <code>attendance</code>, <code>recognition</code>, <code>alerts</code></td></tr>
+    <tr><td><strong>pgvector</strong></td><td>A PostgreSQL extension that can store lists of numbers (vectors) and find the closest one quickly. Used to compare faces.</td><td><code>recognition.face_embeddings</code></td></tr>
+    <tr><td><strong>Face descriptor (embedding)</strong></td><td>A list of 128 numbers that describes a face. Two photos of the same person give similar numbers; different people give very different numbers. The distance between two lists tells how alike two faces are.</td><td>Enrollment and kiosk</td></tr>
+    <tr><td><strong>Redis / Redis Streams</strong></td><td>Redis is a very fast in-memory data store. A <em>stream</em> is a message queue: one service writes an event, another reads it later, even if the reader was busy or offline.</td><td>Unknown-face events from Recognition to Alerts</td></tr>
+    <tr><td><strong>JWT (access token)</strong></td><td>A signed piece of text the server gives you after login. The browser sends it with every request to prove who you are. Valid for 15 minutes.</td><td>Auth Service, all requests</td></tr>
+    <tr><td><strong>Refresh token</strong></td><td>A longer-lived (14-day) secret stored in a secure cookie, used only to get a new access token when the old one expires.</td><td>Auth Service</td></tr>
+    <tr><td><strong>Multi-tenant</strong></td><td>One system serves many organisations ("tenants"). Every row of data has an <code>organization_id</code>, and every query filters by it.</td><td>Every table and service</td></tr>
+    <tr><td><strong>RBAC</strong></td><td>Role-Based Access Control: what you may do depends on your role (admin, manager, gate operator, viewer).</td><td>All services</td></tr>
+    <tr><td><strong>Liveness (blink check)</strong></td><td>A check that the face in front of the camera is a real person, not a printed photo. The kiosk asks for a blink.</td><td>Gate Kiosk</td></tr>
+  </table></div>
+</section>
+
+<!-- 3 -->
+<section id="stack">
+  <h2>3. Technology stack</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Layer</th><th>Technology</th><th>Why it was chosen</th></tr>
+    <tr><td>Backend language</td><td><strong>Node.js</strong> (v24) with JavaScript</td><td>One language for frontend and backend; fast for web APIs.</td></tr>
+    <tr><td>Web framework</td><td><strong>Express 5</strong></td><td>Minimal, widely used HTTP framework for building REST APIs.</td></tr>
+    <tr><td>Gateway proxy</td><td><strong>http-proxy-middleware</strong></td><td>Forwards requests from the gateway to the services.</td></tr>
+    <tr><td>Database</td><td><strong>PostgreSQL 16</strong> + <strong>pgvector 0.8</strong></td><td>Reliable relational database that can also do face-vector search, so no separate vector database is needed.</td></tr>
+    <tr><td>DB driver</td><td><strong>pg</strong> (node-postgres)</td><td>Direct SQL with parameterised queries; no ORM layer.</td></tr>
+    <tr><td>Messaging / cache</td><td><strong>Redis 7</strong> (Streams) with the <strong>redis</strong> npm client</td><td>Reliable event queue between services and short-lived cooldown keys.</td></tr>
+    <tr><td>Authentication</td><td><strong>jsonwebtoken</strong>, <strong>bcryptjs</strong>, <strong>cookie-parser</strong>, <strong>express-rate-limit</strong></td><td>Signed tokens, salted password hashing, secure cookies and protection against sign-up abuse.</td></tr>
+    <tr><td>Config</td><td><strong>dotenv</strong></td><td>Loads settings and secrets from one shared <code>.env</code> file.</td></tr>
+    <tr><td>Containers</td><td><strong>Docker</strong> + <strong>Docker Compose</strong></td><td>Runs PostgreSQL and Redis with one command, the same way on every machine.</td></tr>
+    <tr><td>Frontend</td><td><strong>React 19</strong> (JSX) built with <strong>Vite 8</strong></td><td>Component-based UI; Vite gives a fast dev server and optimised builds.</td></tr>
+    <tr><td>Styling</td><td><strong>Tailwind CSS 4</strong>, Geist font</td><td>Utility CSS for a consistent design system.</td></tr>
+    <tr><td>Icons and charts</td><td><strong>Lucide React</strong>, <strong>Recharts</strong></td><td>Icon set and the 7-day attendance trend chart.</td></tr>
+    <tr><td>Face AI</td><td><strong>@vladmandic/face-api</strong> (on TensorFlow.js)</td><td>Runs face detection, 68-point landmarks and the 128-number face descriptor directly in the browser.</td></tr>
+    <tr><td>Testing</td><td>Node's built-in test runner (<code>node --test</code>), Playwright for browser checks</td><td>No extra test framework needed.</td></tr>
+    <tr><td>Dev tools</td><td><strong>nodemon</strong>, Git</td><td>Auto-restart services while editing; version control.</td></tr>
+  </table></div>
+</section>
+
+<!-- 4 -->
+<section id="architecture">
+  <h2>4. System architecture</h2>
+  <p>SmartGate has seven running parts: a React frontend, one API Gateway, four backend services, and two data stores (PostgreSQL and Redis) that run inside Docker.</p>
+
+  <figure>
+    <svg viewBox="0 0 960 600" role="img" aria-label="Architecture diagram: browser to Vite to gateway to four services to PostgreSQL and Redis">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+        <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead-accent"/></marker>
+      </defs>
+
+      <!-- Browser -->
+      <rect x="280" y="20" width="400" height="62" rx="10" class="box"/>
+      <text x="480" y="46" text-anchor="middle" class="t">Browser: Dashboard + Gate Kiosk</text>
+      <text x="480" y="68" text-anchor="middle" class="s">React · face-api runs here (camera, face → 128 numbers)</text>
+
+      <!-- Vite -->
+      <line x1="480" y1="82" x2="480" y2="118" class="line" marker-end="url(#ah)"/>
+      <rect x="330" y="120" width="300" height="50" rx="10" class="box"/>
+      <text x="480" y="142" text-anchor="middle" class="t">Vite server · localhost:5173</text>
+      <text x="480" y="161" text-anchor="middle" class="s">serves the app, forwards /api</text>
+
+      <!-- Gateway -->
+      <line x1="480" y1="170" x2="480" y2="208" class="line" marker-end="url(#ah)"/>
+      <rect x="260" y="210" width="440" height="58" rx="10" class="box-accent"/>
+      <text x="480" y="235" text-anchor="middle" class="t">API Gateway · port 4000</text>
+      <text x="480" y="256" text-anchor="middle" class="s">origin check · login check · routing</text>
+
+      <!-- Gateway to services -->
+      <path d="M480,268 L480,295 L115,295 L115,328" class="line" marker-end="url(#ah)"/>
+      <path d="M480,295 L355,295 L355,328" class="line" marker-end="url(#ah)"/>
+      <path d="M480,295 L595,295 L595,328" class="line" marker-end="url(#ah)"/>
+      <path d="M480,295 L835,295 L835,328" class="line" marker-end="url(#ah)"/>
+
+      <!-- Services -->
+      <rect x="20" y="330" width="190" height="70" rx="10" class="box"/>
+      <text x="115" y="358" text-anchor="middle" class="t">Auth Service</text>
+      <text x="115" y="380" text-anchor="middle" class="s">port 4001</text>
+
+      <rect x="260" y="330" width="190" height="70" rx="10" class="box"/>
+      <text x="355" y="358" text-anchor="middle" class="t">Attendance Service</text>
+      <text x="355" y="380" text-anchor="middle" class="s">port 4002</text>
+
+      <rect x="500" y="330" width="190" height="70" rx="10" class="box"/>
+      <text x="595" y="358" text-anchor="middle" class="t">Recognition Service</text>
+      <text x="595" y="380" text-anchor="middle" class="s">port 4003</text>
+
+      <rect x="740" y="330" width="190" height="70" rx="10" class="box"/>
+      <text x="835" y="358" text-anchor="middle" class="t">Alerts Service</text>
+      <text x="835" y="380" text-anchor="middle" class="s">port 4004</text>
+
+      <!-- Recognition -> Attendance internal punch -->
+      <line x1="500" y1="365" x2="452" y2="365" class="line-accent" marker-end="url(#aha)"/>
+      <text x="475" y="322" text-anchor="middle" class="s">punch</text>
+
+      <!-- Services to Postgres -->
+      <line x1="115" y1="400" x2="115" y2="508" class="line" marker-end="url(#ah)"/>
+      <line x1="355" y1="400" x2="355" y2="508" class="line" marker-end="url(#ah)"/>
+      <line x1="540" y1="400" x2="540" y2="508" class="line" marker-end="url(#ah)"/>
+      <line x1="912" y1="400" x2="912" y2="508" class="line" marker-end="url(#ah)"/>
+
+      <!-- Redis -->
+      <rect x="610" y="420" width="280" height="56" rx="10" class="box-data"/>
+      <text x="750" y="443" text-anchor="middle" class="t">Redis 7 · Docker · 6379</text>
+      <text x="750" y="463" text-anchor="middle" class="s">stream smartgate:unknown-faces</text>
+      <line x1="660" y1="400" x2="660" y2="418" class="line-accent dash" marker-end="url(#aha)"/>
+      <line x1="840" y1="420" x2="840" y2="402" class="line-accent dash" marker-end="url(#aha)"/>
+
+      <!-- Postgres -->
+      <rect x="20" y="510" width="920" height="70" rx="10" class="box-data"/>
+      <text x="480" y="538" text-anchor="middle" class="t">PostgreSQL 16 + pgvector · Docker · host port 5433 · database smartgate2</text>
+      <text x="480" y="562" text-anchor="middle" class="s">schemas:  auth  │  attendance  │  recognition  │  alerts   (each service may only touch its own)</text>
+    </svg>
+    <figcaption>Solid arrows are HTTP requests or database connections. Dashed arrows are events: Recognition writes unknown-face events to the Redis stream and Alerts reads them. Recognition also calls Attendance directly to record a punch. Every service checks a user's token by asking the Auth Service.</figcaption>
+  </figure>
+
+  <h3>Ports and where each part runs</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Part</th><th>Address</th><th>Runs on</th><th>Folder</th></tr>
+    <tr><td>React frontend</td><td><code>http://localhost:5173</code></td><td>Windows (Vite)</td><td><code>frontend/</code></td></tr>
+    <tr><td>API Gateway</td><td><code>127.0.0.1:4000</code></td><td>Windows (Node.js)</td><td><code>gateway/</code></td></tr>
+    <tr><td>Auth Service</td><td><code>127.0.0.1:4001</code></td><td>Windows (Node.js)</td><td><code>services/auth-service/</code></td></tr>
+    <tr><td>Attendance Service</td><td><code>127.0.0.1:4002</code></td><td>Windows (Node.js)</td><td><code>services/attendance-service/</code></td></tr>
+    <tr><td>Recognition Service</td><td><code>127.0.0.1:4003</code></td><td>Windows (Node.js)</td><td><code>services/recognition-service/</code></td></tr>
+    <tr><td>Alerts Service</td><td><code>127.0.0.1:4004</code></td><td>Windows (Node.js)</td><td><code>services/alerts-service/</code></td></tr>
+    <tr><td>PostgreSQL + pgvector</td><td><code>localhost:5433</code></td><td>Docker container <code>smartgate-postgres</code></td><td><code>db/</code> (schema files)</td></tr>
+    <tr><td>Redis</td><td><code>localhost:6379</code></td><td>Docker container <code>smartgate-redis</code></td><td>—</td></tr>
+  </table></div>
+  <div class="note"><strong>Why 127.0.0.1?</strong>The services listen only on the local machine address, so nothing outside the computer can call them directly. The only way in from the browser is through Vite and the gateway.</div>
+
+  <h3>Design rules that hold the system together</h3>
+  <ul>
+    <li><strong>The browser only talks to the gateway.</strong> Services are never called directly by the frontend.</li>
+    <li><strong>Each service owns its own data.</strong> No service reads another service's tables. If Recognition needs to know whether an employee exists, it asks the Attendance API.</li>
+    <li><strong>No cross-schema foreign keys.</strong> Services store each other's IDs (e.g. <code>employee_id</code>) as plain values.</li>
+    <li><strong>Internal endpoints stay internal.</strong> <code>POST /internal/punch</code> exists on Attendance but the gateway does not forward it; it needs a shared secret key.</li>
+    <li><strong>Every query is scoped to the caller's organisation.</strong></li>
+  </ul>
+</section>
+
+<!-- 5 -->
+<section id="docker">
+  <h2>5. Docker</h2>
+  <p><strong>Docker</strong> runs programs in <em>containers</em>: isolated, pre-packaged environments that include the program and everything it needs. Instead of installing PostgreSQL, pgvector and Redis on Windows by hand, the project downloads ready-made images and runs them with one command. This means the database is set up the same way on every computer.</p>
+  <p><strong>Docker Compose</strong> reads <code>docker-compose.yml</code> and starts all the containers it describes together.</p>
+
+  <h3>What is in <code>docker-compose.yml</code></h3>
+  <div class="table-wrap"><table>
+    <tr><th>Container</th><th>Image</th><th>Port (computer → container)</th><th>Data stored in</th><th>Health check</th></tr>
+    <tr><td><code>smartgate-postgres</code></td><td><code>pgvector/pgvector:pg16</code> (PostgreSQL 16 with pgvector built in)</td><td>5433 → 5432</td><td>Docker volume <code>pgdata</code></td><td><code>pg_isready</code> every 5 s</td></tr>
+    <tr><td><code>smartgate-redis</code></td><td><code>redis:7-alpine</code>, with append-only persistence on</td><td>6379 → 6379</td><td>Docker volume <code>redisdata</code></td><td><code>redis-cli ping</code> every 5 s</td></tr>
+  </table></div>
+  <ul>
+    <li><strong>Volumes</strong> (<code>pgdata</code>, <code>redisdata</code>) are storage areas managed by Docker. They keep the data when containers are stopped or restarted. Data is only lost if the volume is deleted (for example with <code>docker compose down -v</code>).</li>
+    <li><strong>Network</strong> <code>smartgate</code> connects the two containers.</li>
+    <li><strong>First start:</strong> when the <code>pgdata</code> volume is new, PostgreSQL automatically runs <code>db/init.sql</code>, which creates the schemas, tables, roles and permissions.</li>
+    <li><strong>restart: unless-stopped</strong> makes the containers come back automatically when Docker Desktop starts.</li>
+    <li>Port 5433 is used on the computer (instead of PostgreSQL's usual 5432) so it does not clash with any PostgreSQL already installed on Windows.</li>
+  </ul>
+  <div class="note"><strong>What runs in Docker and what does not</strong>Only PostgreSQL and Redis run in Docker. The gateway, the four services and the frontend run directly on Windows with Node.js, which makes development and debugging easier. The compose file notes that the Node services can be added as containers later.</div>
+</section>
+
+<!-- 6 -->
+<section id="database">
+  <h2>6. Database</h2>
+  <p>There is <strong>one PostgreSQL database</strong> called <code>smartgate2</code>, running in the <code>smartgate-postgres</code> container. Inside it there are <strong>four schemas</strong>, one per service, holding <strong>16 tables</strong> in total. The full definition is in <code>db/init.sql</code>.</p>
+
+  <h3>Database roles: each service locked to its own schema</h3>
+  <p>Each service connects with its own database user. That user is only granted access to its own schema, so even a bug in one service cannot read or change another service's data. This was tested: each role is refused access to the other schemas.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Service</th><th>Database user</th><th>Allowed schema</th></tr>
+    <tr><td>Auth</td><td><code>auth_svc</code></td><td><code>auth</code></td></tr>
+    <tr><td>Attendance</td><td><code>attendance_svc</code></td><td><code>attendance</code></td></tr>
+    <tr><td>Recognition</td><td><code>recognition_svc</code></td><td><code>recognition</code></td></tr>
+    <tr><td>Alerts</td><td><code>alerts_svc</code></td><td><code>alerts</code></td></tr>
+  </table></div>
+
+  <h3>Schema <code>auth</code></h3>
+  <div class="table-wrap"><table>
+    <tr><th>Table</th><th>Holds</th><th>Important columns</th></tr>
+    <tr><td><code>organizations</code></td><td>Each registered organisation (tenant)</td><td>name, unique slug, plan (free/pro/enterprise), status (active/suspended)</td></tr>
+    <tr><td><code>users</code></td><td>People who log in to the dashboard</td><td>organization_id, full_name, unique email, password_hash (bcrypt), role, department, is_active, last_login_at</td></tr>
+    <tr><td><code>refresh_tokens</code></td><td>Login sessions</td><td>user_id, token_hash (the token itself is never stored), expires_at, revoked_at</td></tr>
+  </table></div>
+
+  <h3>Schema <code>attendance</code></h3>
+  <div class="table-wrap"><table>
+    <tr><th>Table</th><th>Holds</th><th>Important columns</th></tr>
+    <tr><td><code>org_policies</code></td><td>One attendance policy per organisation</td><td>timezone (default Asia/Karachi), work_start 09:00, work_end 17:00, grace_minutes 10, working_days {1..5} (Mon–Fri), auto_close_time 23:30</td></tr>
+    <tr><td><code>holidays</code></td><td>Holiday dates per organisation</td><td>holiday_date, name</td></tr>
+    <tr><td><code>gates</code></td><td>Physical gates / kiosks</td><td>name (unique in the organisation), direction (entry/exit/both), status (active/inactive)</td></tr>
+    <tr><td><code>employees</code></td><td>People whose attendance is tracked</td><td>employee_code (unique in the organisation), full_name, email, phone, department, designation, status, presence (inside/outside), face_enrolled</td></tr>
+    <tr><td><code>attendance_logs</code></td><td>Every single check-in and check-out</td><td>employee_id, gate_id, action (check_in/check_out), status (on_time/late/normal/early_leave), late_by_minutes, confidence, source, logged_at</td></tr>
+    <tr><td><code>daily_attendance</code></td><td>One summary row per employee per day</td><td>work_date, first_check_in, last_check_out, total_minutes, late_by_minutes, day_status (present/late/incomplete …)</td></tr>
+  </table></div>
+
+  <h3>Schema <code>recognition</code></h3>
+  <div class="table-wrap"><table>
+    <tr><th>Table</th><th>Holds</th><th>Important columns</th></tr>
+    <tr><td><code>face_embeddings</code></td><td>Face samples of enrolled employees</td><td>employee_id, <code>embedding vector(128)</code> – the 128 numbers describing a face. <strong>No photos are stored.</strong></td></tr>
+    <tr><td><code>org_settings</code></td><td>Recognition settings per organisation</td><td>match_threshold (default 0.5), liveness_required (default true)</td></tr>
+    <tr><td><code>recognition_events</code></td><td>Every identification attempt</td><td>employee_id (empty if nobody matched), gate_id, distance, matched</td></tr>
+  </table></div>
+
+  <h3>Schema <code>alerts</code></h3>
+  <div class="table-wrap"><table>
+    <tr><th>Table</th><th>Holds</th><th>Important columns</th></tr>
+    <tr><td><code>unknown_faces</code></td><td>Each unknown-face alert</td><td>gate_id, snapshot_path (file on disk, not in the database), status (new/reviewed/dismissed), reviewed_by, reviewed_at, note, captured_at</td></tr>
+    <tr><td><code>notification_recipients</code></td><td>Who should be notified</td><td>email, alert_types (unknown_face, late_arrival, forgot_checkout, daily_summary)</td></tr>
+    <tr><td><code>notifications</code></td><td>Queued notification messages</td><td>type, recipient, subject, payload, status (queued/sent/failed)</td></tr>
+    <tr><td><code>audit_logs</code></td><td>Record of who did what</td><td>actor_user_id, action, entity_type, entity_id, details</td></tr>
+  </table></div>
+
+  <h3>Migrations</h3>
+  <p><code>db/init.sql</code> only runs automatically on a brand-new database volume. Later changes are kept in <code>db/migrations/</code> and must be applied by hand to an existing database:</p>
+  <ul>
+    <li><code>001_gate_status.sql</code> – adds the <code>status</code> column to gates.</li>
+    <li><code>002_recognition_threshold.sql</code> – changes the default match threshold from 0.6 to 0.5.</li>
+  </ul>
+</section>
+
+<!-- 7 -->
+<section id="gateway">
+  <h2>7. API Gateway <span class="muted">(port 4000, <code>gateway/</code>)</span></h2>
+  <p>The gateway is the <strong>single entry point</strong> of the backend. The frontend sends every request to it, and it decides where the request goes. It contains no business logic and no database connection; it only checks and forwards.</p>
+
+  <h3>What happens to each request</h3>
+  <ol class="steps">
+    <li><strong>Origin check.</strong> If the request comes from a browser page other than <code>http://localhost:5173</code>, it is refused with <code>403</code>. This stops other websites from using a logged-in user's session.</li>
+    <li><strong>CORS and headers.</strong> CORS is allowed only for the frontend origin. Responses are marked <code>Cache-Control: no-store</code>.</li>
+    <li><strong>Strip identity headers.</strong> Headers like <code>x-user-id</code>, <code>x-organization-id</code>, <code>x-user-role</code> and <code>x-internal-key</code> sent by the client are deleted, so nobody can pretend to be another user or service.</li>
+    <li><strong>Login check</strong> (all routes except signup, login, refresh, logout). The gateway takes the <code>Authorization: Bearer &lt;token&gt;</code> header and asks the Auth Service <code>/api/auth/me</code> whether it is valid. Invalid → <code>401</code>/<code>403</code>; Auth down → <code>503</code>.</li>
+    <li><strong>Routing.</strong> The URL prefix decides the target: <code>/api/auth</code> and <code>/api/users</code> → Auth, <code>/api/attendance</code> → Attendance, <code>/api/recognition</code> → Recognition, <code>/api/alerts</code> → Alerts. The full path and body are forwarded unchanged.</li>
+    <li><strong>Errors.</strong> If a service can't be reached the gateway returns <code>502</code> with a clear message; unknown routes return <code>404</code>. Timeouts are 10–15 seconds.</li>
+  </ol>
+  <div class="note"><strong>Defence in depth</strong>The gateway's login check is a first filter. Each service still verifies the token again itself and checks the user's role and organisation, so a service is safe even if a request somehow bypasses the gateway.</div>
+  <p><strong>Files:</strong> <code>server.js</code> (setup, origin check, header stripping), <code>routes/api.js</code> (route table and proxies), <code>middleware/auth.js</code> (token check via Auth).</p>
+</section>
+
+<!-- 8 -->
+<section id="auth">
+  <h2>8. Auth Service <span class="muted">(port 4001, schema <code>auth</code>)</span></h2>
+  <p>Handles <strong>who you are</strong> and <strong>which organisation you belong to</strong>.</p>
+  <h3>Responsibilities</h3>
+  <ul>
+    <li><strong>Organisation sign-up:</strong> creates the organisation and its first <code>org_admin</code> user together in one database transaction (both succeed or neither does). Sign-up is rate-limited to prevent abuse.</li>
+    <li><strong>Login:</strong> checks the password against its bcrypt hash, then issues:
+      <ul>
+        <li>an <strong>access token</strong> (JWT, valid 15 minutes) returned to the app, kept only in memory;</li>
+        <li>a <strong>refresh token</strong> (valid 14 days) in an HttpOnly cookie that JavaScript cannot read. Only its hash is saved in the database.</li>
+      </ul></li>
+    <li><strong>Refresh:</strong> swaps an old refresh token for a new pair (token rotation), so a stolen old token stops working.</li>
+    <li><strong>Logout</strong> and <strong>session revocation</strong> after security-sensitive changes (e.g. password or role changes).</li>
+    <li><strong><code>/api/auth/me</code>:</strong> returns the current user. The gateway and every other service use this to verify tokens.</li>
+    <li><strong>User management:</strong> list, create and update users inside your own organisation only.</li>
+    <li>Blocks inactive users and suspended organisations.</li>
+  </ul>
+  <p><strong>Files:</strong> <code>routes/auth.js</code>, <code>routes/users.js</code>, <code>middleware/auth.js</code>, <code>db.js</code>, <code>utils.js</code>.</p>
+</section>
+
+<!-- 9 -->
+<section id="attendance">
+  <h2>9. Attendance Service <span class="muted">(port 4002, schema <code>attendance</code>)</span></h2>
+  <p>The core business logic: policies, employees, gates, check-ins and reports.</p>
+
+  <h3>Policy</h3>
+  <p>Each organisation has one policy: timezone, work start and end, grace minutes, working days and an auto-close time. Only <code>org_admin</code> can change it. All times are calculated in the policy's timezone.</p>
+
+  <h3>Employees</h3>
+  <ul>
+    <li>Create, list, view and update. Only <code>org_admin</code> can create or edit; all roles can read.</li>
+    <li>Employee code must be unique inside the organisation (the same code may exist in another organisation).</li>
+    <li>Employees are never deleted, only deactivated, because attendance history points to them.</li>
+    <li><code>presence</code> and <code>face_enrolled</code> cannot be edited by users: punches set presence, the Recognition Service sets face_enrolled.</li>
+    <li>The list supports search (name or code), filters (status, presence, department) and pagination.</li>
+  </ul>
+
+  <h3>Gates</h3>
+  <p>Each gate has a name and a direction: <code>entry</code> (always check-in), <code>exit</code> (always check-out) or <code>both</code> (toggles: if outside, check in; if inside, check out). Gates are deactivated, never deleted.</p>
+
+  <h3>Punch processing: the attendance rules</h3>
+  <p>When the Recognition Service matches a face, it calls <code>POST /internal/punch</code> with the employee, gate and confidence. This endpoint needs the secret <code>X-Internal-Key</code> and is not reachable through the gateway.</p>
+  <ul>
+    <li><strong>Cooldown:</strong> a repeat punch for the same person within 180 seconds is ignored. The employee row is locked during processing, so five simultaneous punches record exactly one.</li>
+    <li><strong>Late:</strong> only the first check-in of a working day is judged. Arriving more than <code>grace_minutes</code> after <code>work_start</code> is <code>late</code>, and the lateness is counted from <code>work_start</code>. Re-entries later in the day are <code>normal</code>. Weekends and holidays are never late.</li>
+    <li><strong>Early leave:</strong> checking out before <code>work_end</code> on a working day is <code>early_leave</code>.</li>
+    <li>Every punch writes a row to <code>attendance_logs</code> and updates the employee's presence.</li>
+    <li><strong>Daily summary:</strong> the first check-in of the day creates the <code>daily_attendance</code> row (<code>present</code> or <code>late</code>); each check-out updates the last check-out time and adds the minutes spent inside.</li>
+    <li><strong>Forgotten check-outs:</strong> a background job runs every minute. After the auto-close time (or on the next day) it marks people as outside and sets that day to <code>incomplete</code>.</li>
+    <li>Ignored punches return a reason: <code>cooldown</code>, <code>already_inside</code> or <code>not_inside</code>.</li>
+  </ul>
+
+  <h3>Monitoring (read-only, all roles)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Endpoint</th><th>Returns</th></tr>
+    <tr><td><code>/presence</code></td><td>How many active employees, how many are inside, and who is inside with check-in time and gate.</td></tr>
+    <tr><td><code>/logs</code></td><td>Punch history with date range, employee, gate, action and status filters.</td></tr>
+    <tr><td><code>/daily</code></td><td>One record per employee for a date. Employees with no row are counted <code>absent</code> on working days, or <code>weekend</code>/<code>holiday</code>.</td></tr>
+    <tr><td><code>/stats</code></td><td>Today's present/late/incomplete/absent counts, people inside now, and a 7-day trend for the chart.</td></tr>
+  </table></div>
+  <p><strong>Files:</strong> <code>routes/policy.js</code>, <code>routes/employees.js</code>, <code>routes/gates.js</code>, <code>routes/internal.js</code> (punch), <code>routes/monitoring.js</code>, <code>rules.js</code> (the check-in/late/early-leave rules), <code>auth.js</code> (login, role and internal-key checks), <code>helpers.js</code>, <code>db.js</code>, <code>test/</code> (5 test files).</p>
+</section>
+
+<!-- 10 -->
+<section id="recognition">
+  <h2>10. Recognition Service <span class="muted">(port 4003, schema <code>recognition</code>)</span></h2>
+  <p>Stores face data and decides <strong>whose face this is</strong>.</p>
+  <div class="note"><strong>Privacy by design</strong>Face detection runs in the browser. The service only ever receives the 128-number descriptor, never a photo of an enrolled person. The only image it ever handles is an optional snapshot of an <em>unknown</em> face, which it passes on to Alerts.</div>
+
+  <h3>Enrollment (org_admin)</h3>
+  <ul>
+    <li>Receives 3–10 face samples for an employee; new samples replace old ones.</li>
+    <li>Checks with the Attendance API that the employee exists, belongs to the organisation and is active.</li>
+    <li>Refuses (<code>409</code>) if the same face is already enrolled for a different employee.</li>
+    <li>Tells Attendance to set <code>face_enrolled = true</code> through an internal endpoint; if that fails, the samples are rolled back.</li>
+    <li>Deleting a face removes all samples and clears <code>face_enrolled</code>.</li>
+  </ul>
+
+  <h3>Identification (gate_operator, org_admin)</h3>
+  <ol class="steps">
+    <li>The kiosk sends the face descriptor, the gate ID, <code>liveness_passed</code> (blink check result) and optionally a JPEG snapshot.</li>
+    <li>If liveness is required and not passed → <code>400</code>. The gate must be active and in the same organisation.</li>
+    <li><strong>pgvector search:</strong> computes the L2 (straight-line) distance between the descriptor and every sample in the organisation, and keeps the nearest sample per employee.</li>
+    <li><strong>Decision:</strong> a match needs distance ≤ <code>match_threshold</code> (0.5), <em>and</em> the best person must be at least 0.05 closer than the second-best person. Otherwise the result is <code>no_match</code> or <code>ambiguous</code>.</li>
+    <li>Every attempt is saved in <code>recognition_events</code>.</li>
+    <li><strong>On a match:</strong> calls Attendance <code>/internal/punch</code> with confidence = 1 − distance, and returns the employee and attendance result to the kiosk.</li>
+    <li><strong>On no match with a snapshot:</strong> writes an event to the Redis stream <code>smartgate:unknown-faces</code> (at most one per gate every 30 seconds) and returns <code>alert_queued</code>. If Redis is down, identification still works.</li>
+  </ol>
+
+  <h3>Settings (org_admin)</h3>
+  <p><code>match_threshold</code> between 0.2 and 0.8 (lower = stricter), and <code>liveness_required</code> on/off.</p>
+  <p><strong>Files:</strong> <code>routes/faces.js</code>, <code>routes/identify.js</code>, <code>routes/settings.js</code>, <code>events.js</code> (Redis stream producer), <code>test/recognition.test.js</code>.</p>
+</section>
+
+<!-- 11 -->
+<section id="alerts">
+  <h2>11. Alerts Service <span class="muted">(port 4004, schema <code>alerts</code>)</span></h2>
+  <p>Handles unknown faces, notifications and the audit log.</p>
+  <h3>Stream consumer</h3>
+  <ul>
+    <li>Joins the Redis consumer group <code>alerts-service</code> and reads events from <code>smartgate:unknown-faces</code>.</li>
+    <li>Validates each event, saves the JPEG into the snapshots folder (<code>services/alerts-service/snapshots/</code>) and stores only the file path in <code>alerts.unknown_faces</code>.</li>
+    <li>The alert ID is derived from the stream message ID, so processing the same message twice can never create a duplicate alert.</li>
+    <li>Queues one notification per recipient subscribed to <code>unknown_face</code>.</li>
+    <li>Bad messages are logged and dropped; other failures stay pending and are retried when the service restarts.</li>
+  </ul>
+  <h3>APIs</h3>
+  <ul>
+    <li><strong>Unknown faces:</strong> list (with counts per status and filters), view, view snapshot, and review (<code>new</code> → <code>reviewed</code> or <code>dismissed</code>, with a note and who reviewed it).</li>
+    <li>Snapshots are only served through the API with a valid token; the file path is never revealed.</li>
+    <li><strong>Recipients:</strong> email addresses and the alert types they want.</li>
+    <li><strong>Notifications log</strong> and <strong>audit log</strong> (reviews and recipient changes, with the acting user).</li>
+  </ul>
+  <p><strong>Files:</strong> <code>consumer.js</code>, <code>routes/unknown-faces.js</code>, <code>routes/recipients.js</code>, <code>routes/history.js</code>, <code>test/alerts.test.js</code>.</p>
+</section>
+
+<!-- 12 -->
+<section id="frontend">
+  <h2>12. Frontend <span class="muted">(<code>frontend/</code>, localhost:5173)</span></h2>
+  <p>A single-page React app with two faces: the <strong>admin dashboard</strong> and the <strong>gate kiosk</strong>.</p>
+
+  <h3>How it connects to the backend</h3>
+  <ul>
+    <li>The app calls <code>/api/...</code> on its own address. The Vite server forwards those calls to the gateway at port 4000. This keeps the refresh cookie on the same site and makes the gateway's origin check pass.</li>
+    <li>The access token is kept in memory only. On page reload, the app uses the refresh cookie to restore the session. If any request gets <code>401</code>, it refreshes once and retries automatically.</li>
+    <li>Navigation uses hash URLs (e.g. <code>#/employees</code>), handled by a tiny router in <code>src/router.js</code>.</li>
+    <li>The menu changes by role, matching what the backend allows.</li>
+  </ul>
+
+  <h3>Screens</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Screen</th><th>File</th><th>What it shows / does</th></tr>
+    <tr><td>Login / Sign-up</td><td><code>Login.jsx</code></td><td>Sign in, or register a new organisation.</td></tr>
+    <tr><td>Overview</td><td><code>Overview.jsx</code></td><td>Stat tiles, 7-day attendance chart, who is inside, recent activity, latest unknown faces.</td></tr>
+    <tr><td>Presence</td><td><code>Presence.jsx</code></td><td>Live list of people currently inside.</td></tr>
+    <tr><td>Attendance</td><td><code>Attendance.jsx</code></td><td>Daily report with filters and summary; punch history.</td></tr>
+    <tr><td>Employees</td><td><code>Employees.jsx</code></td><td>Search, filter, add, edit, deactivate, and open face enrollment.</td></tr>
+    <tr><td>Face enrollment</td><td><code>EnrollFace.jsx</code></td><td>Webcam capture of 5 consistent samples; replace or remove face data.</td></tr>
+    <tr><td>Gates</td><td><code>Gates.jsx</code></td><td>Manage gates; open a gate's kiosk.</td></tr>
+    <tr><td>Alerts</td><td><code>Alerts.jsx</code></td><td>Unknown-face gallery and review, recipients, notifications, audit log.</td></tr>
+    <tr><td>Settings</td><td><code>Settings.jsx</code></td><td>Attendance policy, recognition threshold and blink switch, team members.</td></tr>
+    <tr><td>Gate Kiosk</td><td><code>Kiosk.jsx</code> (<code>#/kiosk/&lt;gateId&gt;</code>)</td><td>Full-screen camera view at the gate.</td></tr>
+  </table></div>
+
+  <h3>How the face AI works in the browser</h3>
+  <p><code>src/face.js</code> loads three neural network models from <code>/models</code> (copied from <code>node_modules</code> at build time):</p>
+  <ol>
+    <li><strong>Tiny Face Detector</strong> – finds where the face is in the camera frame.</li>
+    <li><strong>Face Landmark 68</strong> – finds 68 points on the face (eyes, nose, mouth). The eye points are also used for the blink check.</li>
+    <li><strong>Face Recognition Net</strong> – turns the face into the 128-number descriptor.</li>
+  </ol>
+  <p>The face libraries are only loaded on the kiosk and enrollment screens (code splitting), so the rest of the dashboard stays light.</p>
+
+  <h3>The kiosk, step by step</h3>
+  <ul>
+    <li>Shows a live clock and the camera feed.</li>
+    <li>Needs the same person in <strong>3 consecutive frames</strong> before acting.</li>
+    <li>Runs an <strong>adaptive blink check</strong> using the eye aspect ratio (how open the eyes are).</li>
+    <li>Averages the descriptors, takes a small JPEG of the face, and sends them to <code>/api/recognition/identify</code>.</li>
+    <li>Shows a result card: <em>Welcome</em>, <em>Late</em>, <em>Goodbye</em>, <em>Already recorded</em> or <em>Not recognised</em>.</li>
+    <li>Ignores the person it just identified while they walk away.</li>
+  </ul>
+  <p><strong>Other files:</strong> <code>api.js</code> (fetch wrapper with refresh-and-retry), <code>auth.jsx</code> (session state), <code>ui.jsx</code> (buttons, tables, modals, toasts), <code>index.css</code> (design tokens), <code>snapshot.jsx</code> (loads alert photos with the token).</p>
+</section>
+
+<!-- 13 -->
+<section id="flows">
+  <h2>13. End-to-end flows</h2>
+
+  <h3>A. Setting up an organisation</h3>
+  <ol class="steps">
+    <li>Open <code>http://localhost:5173</code> and sign up. Auth creates the organisation and the first admin.</li>
+    <li>In Settings, set the attendance policy (timezone, hours, grace minutes, working days).</li>
+    <li>Add gates (e.g. "Main Gate", direction <em>both</em>).</li>
+    <li>Add employees, then enroll each employee's face.</li>
+    <li>Open the kiosk for a gate on the device at that gate (logged in as a gate operator or admin).</li>
+  </ol>
+
+  <h3>B. Logging in</h3>
+  <ol class="steps">
+    <li>Browser → Vite → Gateway → Auth: <code>POST /api/auth/login</code> with email and password.</li>
+    <li>Auth checks the bcrypt hash, creates a session, returns the 15-minute access token and sets the 14-day refresh cookie.</li>
+    <li>Every later request carries <code>Authorization: Bearer &lt;token&gt;</code>. The gateway confirms it with Auth before forwarding.</li>
+    <li>When the token expires, the app calls <code>/api/auth/refresh</code> automatically and retries.</li>
+  </ol>
+
+  <h3>C. Enrolling a face</h3>
+  <ol class="steps">
+    <li>Admin opens an employee and starts enrollment. The webcam turns on.</li>
+    <li>face-api captures 5 samples, checking each is consistent with the first.</li>
+    <li>The browser sends only the 5 × 128 numbers: <code>PUT /api/recognition/employees/:id/faces</code>.</li>
+    <li>Recognition checks the employee with Attendance, makes sure the face isn't already someone else's, and stores the samples in pgvector.</li>
+    <li>Recognition tells Attendance (internal call) to set <code>face_enrolled = true</code>.</li>
+  </ol>
+
+  <h3>D. A known employee arrives at the gate</h3>
+  <ol class="steps">
+    <li>Kiosk detects a face in 3 frames in a row and the person blinks.</li>
+    <li>Kiosk sends descriptor + gate ID + liveness result + snapshot to <code>POST /api/recognition/identify</code> (via Vite and the gateway).</li>
+    <li>Recognition finds the nearest employee using pgvector. Distance 0.32 ≤ 0.5 and clearly better than the next person → match.</li>
+    <li>Recognition calls Attendance <code>POST /internal/punch</code> with the secret key.</li>
+    <li>Attendance locks the employee row, checks the cooldown, sees the employee is outside → <strong>check-in</strong>. It is 09:25 with a 09:00 start and 10 grace minutes → <strong>late by 25 minutes</strong>.</li>
+    <li>Attendance writes the log, sets presence to inside, and creates today's daily row with status <code>late</code>.</li>
+    <li>The result travels back; the kiosk shows "Late – 25 min". The dashboard's Presence and Overview update on their next refresh.</li>
+  </ol>
+
+  <h3>E. An unknown person arrives at the gate</h3>
+  <ol class="steps">
+    <li>Kiosk sends the descriptor and a JPEG snapshot to identify.</li>
+    <li>Recognition finds no employee within the threshold → <code>no_match</code>. The event is saved.</li>
+    <li>If this gate hasn't raised an alert in the last 30 seconds (checked with a Redis key), Recognition adds an event with the snapshot to the Redis stream.</li>
+    <li>The kiosk shows "Not recognised".</li>
+    <li>The Alerts Service reads the event, saves the JPEG to the snapshots folder, creates an <code>unknown_faces</code> row and queues notifications for subscribed recipients.</li>
+    <li>An admin or manager opens Alerts, sees the photo, and marks it reviewed or dismissed. The review is written to the audit log.</li>
+  </ol>
+
+  <h3>F. Someone forgets to check out</h3>
+  <ol class="steps">
+    <li>The Attendance background job runs every minute.</li>
+    <li>After the policy's auto-close time (23:30 by default), anyone still inside is set to outside.</li>
+    <li>That day's record becomes <code>incomplete</code>. No fake check-out is written, so the history stays honest.</li>
+  </ol>
+</section>
+
+<!-- 14 -->
+<section id="security">
+  <h2>14. Security and multi-tenancy</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Threat</th><th>Protection</th></tr>
+    <tr><td>Password theft from the database</td><td>Passwords stored only as bcrypt hashes; refresh tokens stored only as hashes.</td></tr>
+    <tr><td>Stolen token</td><td>Access tokens last 15 minutes; refresh tokens rotate on every use and can be revoked; refresh cookie is HttpOnly so scripts can't read it.</td></tr>
+    <tr><td>One organisation seeing another's data</td><td>Every query filters by the caller's <code>organization_id</code>. Requests for another organisation's records return <code>404</code>. Tested for every resource.</td></tr>
+    <tr><td>Faking identity with headers</td><td>The gateway deletes client-supplied identity and internal-key headers.</td></tr>
+    <tr><td>Calling internal endpoints from outside</td><td><code>/internal/punch</code> is not routed by the gateway and needs a 32+ character shared key.</td></tr>
+    <tr><td>Other websites using your session</td><td>Gateway refuses any browser origin other than the frontend.</td></tr>
+    <tr><td>A buggy service damaging other data</td><td>Each service's database user can only access its own schema.</td></tr>
+    <tr><td>Doing more than your role allows</td><td>Role checks in every service (RBAC), not only in the UI.</td></tr>
+    <tr><td>Printed photo at the kiosk</td><td>Blink-based liveness check.</td></tr>
+    <tr><td>Face photo privacy</td><td>Enrolled faces are stored as numbers only; snapshots are only of unknown faces and only served to authorised roles.</td></tr>
+    <tr><td>Bad input</td><td>Strict validation: unknown fields, bad UUIDs, bad times and malformed JSON are rejected with <code>400</code>; SQL is always parameterised.</td></tr>
+  </table></div>
+</section>
+
+<!-- 15 -->
+<section id="roles">
+  <h2>15. Roles and permissions</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Action</th><th>org_admin</th><th>manager</th><th>gate_operator</th><th>viewer</th></tr>
+    <tr><td>View employees, gates, policy, presence, reports</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Create / edit employees and gates</td><td>✓</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>Change attendance policy and recognition settings</td><td>✓</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>Manage team members (users)</td><td>✓</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>Enroll / delete faces</td><td>✓</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>Run the kiosk (identify faces)</td><td>✓</td><td>–</td><td>✓</td><td>–</td></tr>
+    <tr><td>View unknown faces and snapshots</td><td>✓</td><td>✓</td><td>✓</td><td>–</td></tr>
+    <tr><td>Review / dismiss unknown faces</td><td>✓</td><td>✓</td><td>–</td><td>–</td></tr>
+    <tr><td>Recipients, notifications log, audit log</td><td>✓</td><td>–</td><td>–</td><td>–</td></tr>
+  </table></div>
+  <p class="muted">A fifth role, <code>super_admin</code>, exists at platform level and belongs to no organisation.</p>
+</section>
+
+<!-- 16 -->
+<section id="config">
+  <h2>16. Configuration (<code>.env</code>)</h2>
+  <p>All parts read one shared file, <code>.env</code>, in the project root. <code>.env.example</code> is the template (it contains no real secrets). The real <code>.env</code> must never be committed or shared publicly.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Variable</th><th>Meaning</th></tr>
+    <tr><td><code>POSTGRES_USER / PASSWORD / DB / PORT</code></td><td>Database superuser and database name (<code>smartgate2</code>), host port 5433.</td></tr>
+    <tr><td><code>AUTH_ / ATTENDANCE_ / RECOGNITION_ / ALERTS_DATABASE_URL</code></td><td>Connection string for each service's own database user.</td></tr>
+    <tr><td><code>REDIS_URL</code>, <code>REDIS_PORT</code></td><td>Redis address.</td></tr>
+    <tr><td><code>*_PORT</code>, <code>*_HOST</code>, <code>*_SERVICE_URL</code></td><td>Where each service listens, and where the gateway forwards to.</td></tr>
+    <tr><td><code>JWT_SECRET</code></td><td>Secret used to sign access tokens.</td></tr>
+    <tr><td><code>INTERNAL_SERVICE_KEY</code></td><td>Shared secret between Recognition and Attendance (minimum 32 characters).</td></tr>
+    <tr><td><code>PUNCH_COOLDOWN_SECONDS</code></td><td>Ignore repeat recognitions of a person within this time (default 180).</td></tr>
+    <tr><td><code>RECOGNITION_MATCH_MARGIN</code></td><td>How much better the best match must be than the second (default 0.05).</td></tr>
+    <tr><td><code>UNKNOWN_FACE_COOLDOWN_SECONDS</code></td><td>At most one unknown-face alert per gate in this time (default 30).</td></tr>
+    <tr><td><code>ALERTS_SNAPSHOT_DIR</code></td><td>Optional folder for unknown-face photos.</td></tr>
+    <tr><td><code>FRONTEND_ORIGIN</code></td><td>The only browser origin the gateway accepts (<code>http://localhost:5173</code>).</td></tr>
+  </table></div>
+</section>
+
+<!-- 17 -->
+<section id="structure">
+  <h2>17. Folder structure</h2>
+<pre><code>smartgate-platform/
+├── .env / .env.example        shared configuration
+├── docker-compose.yml         PostgreSQL + Redis containers
+├── PROJECT_STATUS.md          living status / handoff document
+├── db/
+│   ├── init.sql               schemas, tables, roles, permissions
+│   └── migrations/            001_gate_status.sql, 002_recognition_threshold.sql
+├── gateway/
+│   ├── server.js              origin check, header stripping, startup
+│   ├── routes/api.js          route table → services
+│   └── middleware/auth.js     token check via Auth /me
+├── services/
+│   ├── auth-service/          routes/auth.js, routes/users.js
+│   ├── attendance-service/    server.js, db.js, auth.js, helpers.js, rules.js,
+│   │                          routes/policy, employees, gates, internal, monitoring + test/
+│   ├── recognition-service/   routes/faces, identify, settings, events.js + test/
+│   └── alerts-service/        consumer.js, routes/unknown-faces, recipients, history + test/
+│       (the other services also have server.js, db.js, utils.js, middleware/auth.js)
+└── frontend/
+    ├── vite.config.js         dev server + /api proxy
+    ├── scripts/copy-models.js copies face models to public/models
+    └── src/
+        ├── main.jsx, App.jsx  entry and layout
+        ├── api.js, auth.jsx   API calls and session
+        ├── face.js            face-api model loading
+        ├── router.js, ui.jsx, index.css, snapshot.jsx
+        └── pages/             Login, Overview, Presence, Attendance, Employees,
+                               EnrollFace, Gates, Alerts, Settings, Kiosk</code></pre>
+</section>
+
+<!-- 18 -->
+<section id="run">
+  <h2>18. How to run</h2>
+  <p><strong>Requirements:</strong> Docker Desktop, Node.js (v24 used), Google Chrome or Edge, a webcam.</p>
+  <h3>First time on a new computer</h3>
+  <ol>
+    <li>Copy <code>.env.example</code> to <code>.env</code> and fill in <code>JWT_SECRET</code> and <code>INTERNAL_SERVICE_KEY</code> with long random strings.</li>
+    <li>Run <code>npm install</code> in <code>gateway</code>, each folder in <code>services</code>, and <code>frontend</code>.</li>
+  </ol>
+  <h3>Every time</h3>
+<pre><code>1. Start Docker Desktop
+2. docker compose up -d                                  (in the project folder)
+3. cd services\auth-service;        npm start           (terminal 1, port 4001)
+4. cd services\attendance-service;  npm start           (terminal 2, port 4002)
+5. cd services\recognition-service; npm start           (terminal 3, port 4003)
+6. cd services\alerts-service;      npm start           (terminal 4, port 4004)
+7. cd gateway;                      npm start           (terminal 5, port 4000)
+8. cd frontend;                     npm start           (terminal 6, port 5173)
+9. Open http://localhost:5173</code></pre>
+  <div class="note"><strong>Use localhost, not 127.0.0.1</strong>Browsers only allow camera access and the refresh cookie on <code>localhost</code>. <code>npm start</code> in the frontend builds the optimised version (about 2.8 s to load); <code>npm run dev</code> is for editing and is slower.</div>
+  <p><strong>Stop:</strong> <code>Ctrl+C</code> in each terminal, then <code>docker compose down</code> (data is kept).</p>
+</section>
+
+<!-- 19 -->
+<section id="testing">
+  <h2>19. Testing and verification</h2>
+  <h3>Automated unit tests</h3>
+  <p>29 unit tests using Node's built-in test runner (<code>npm test</code> in each service): 18 in Attendance, 6 in Recognition, 5 in Alerts.</p>
+  <h3>Live integration checks (through the gateway, against the real database)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Area</th><th>Checks</th><th>Result</th></tr>
+    <tr><td>Auth, gateway, policy</td><td>Health, 401/403/404 handling, origin check, header spoofing, cross-organisation access</td><td><span class="badge b-ok">Passed</span></td></tr>
+    <tr><td>Employee management</td><td>50</td><td><span class="badge b-ok">All passed</span></td></tr>
+    <tr><td>Gate management</td><td>41</td><td><span class="badge b-ok">All passed</span></td></tr>
+    <tr><td>Punch processing</td><td>37 (run twice), incl. 5 simultaneous punches → 1 recorded</td><td><span class="badge b-ok">All passed</span></td></tr>
+    <tr><td>Monitoring</td><td>37</td><td><span class="badge b-ok">All passed</span></td></tr>
+    <tr><td>Recognition</td><td>44 (synthetic face descriptors)</td><td><span class="badge b-ok">All passed</span></td></tr>
+    <tr><td>Unknown faces and Alerts</td><td>45</td><td><span class="badge b-ok">All passed</span></td></tr>
+    <tr><td>Frontend</td><td>Every screen in Edge with Playwright and a fake camera, desktop (1440px) and mobile (390px)</td><td><span class="badge b-ok">Passed</span>, 3 bugs found and fixed</td></tr>
+  </table></div>
+  <p>After every test run, all temporary data was removed and the database was returned to its starting state.</p>
+  <p><strong>Performance</strong> (production build): sign-in and first load 2.8 s, page switches 56–134 ms, 60 fps.</p>
+</section>
+
+<!-- 20 -->
+<section id="status">
+  <h2>20. Status and limitations</h2>
+  <h3>Progress</h3>
+  <div class="table-wrap"><table>
+    <tr><th>#</th><th>Milestone</th><th>Status</th></tr>
+    <tr><td>1</td><td>Attendance Service foundation and policy APIs</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>2</td><td>Employee management</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>3</td><td>Gate management</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>4</td><td>Internal punch endpoint and duplicate protection</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>5</td><td>Check-in/out, lateness, presence and daily summaries</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>6</td><td>Monitoring and statistics APIs</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>7</td><td>Recognition Service and face matching</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>8</td><td>Unknown-face flow and Alerts Service</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>9</td><td>React dashboard and kiosk</td><td><span class="badge b-ok">Done</span></td></tr>
+    <tr><td>10</td><td>End-to-end testing with a real webcam and two organisations</td><td><span class="badge b-warn">Next</span></td></tr>
+    <tr><td>11</td><td>Demo data, diagrams, API docs, report and presentation</td><td><span class="badge b-warn">Pending</span></td></tr>
+  </table></div>
+
+  <h3>Known limitations</h3>
+  <div class="warn"><strong>To be tuned with real cameras</strong>The match threshold (0.5), margin (0.05) and blink thresholds are starting values. So far the kiosk has only been tested with a simulated camera.</div>
+  <ul>
+    <li>No email is actually sent yet: notifications are queued, waiting for an email (SMTP) sender. Only unknown-face notifications are produced.</li>
+    <li>The blink check stops printed photos, but not a video replay or a modified client.</li>
+    <li>Only one shift per organisation; overnight shifts are not supported.</li>
+    <li>Holidays have no screen or API yet; they can only be added in the database.</li>
+    <li>No automatic migration runner; migrations are applied by hand.</li>
+    <li>Audit log covers Alerts actions only.</li>
+    <li>Unknown-face snapshots are kept forever on disk.</li>
+    <li>Failed stream events are retried only when the Alerts Service restarts.</li>
+    <li>Face search compares against every sample in the organisation; fine for thousands of samples. For much larger organisations, an HNSW index (already prepared in <code>init.sql</code> as a comment) can be enabled.</li>
+    <li>Development database passwords are written in <code>db/init.sql</code>; a real deployment would use secrets.</li>
+  </ul>
+
+  <h3>Future work</h3>
+  <ul>
+    <li>Email sending; late-arrival, forgotten-checkout and daily-summary notifications.</li>
+    <li>Multiple shifts, leave management, manual corrections and report exports.</li>
+    <li>Stronger anti-spoofing (depth or challenge-response).</li>
+    <li>Running all services in Docker for one-command deployment.</li>
+  </ul>
+</section>
+
+<!-- 21 -->
+<section id="api">
+  <h2>21. Full API list</h2>
+  <p>All public routes go through the gateway at <code>/api/...</code>. Everything except signup, login, refresh and logout needs a bearer token.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Method</th><th>Path</th><th>Service</th><th>Purpose</th></tr>
+    <tr><td>GET</td><td><code>/health</code></td><td>Gateway</td><td>Is the gateway up</td></tr>
+    <tr><td>POST</td><td><code>/api/auth/signup</code></td><td>Auth</td><td>Register organisation + first admin</td></tr>
+    <tr><td>POST</td><td><code>/api/auth/login</code></td><td>Auth</td><td>Log in</td></tr>
+    <tr><td>POST</td><td><code>/api/auth/refresh</code></td><td>Auth</td><td>New access token from refresh cookie</td></tr>
+    <tr><td>POST</td><td><code>/api/auth/logout</code></td><td>Auth</td><td>End session</td></tr>
+    <tr><td>GET</td><td><code>/api/auth/me</code></td><td>Auth</td><td>Current user</td></tr>
+    <tr><td>GET · POST</td><td><code>/api/users</code></td><td>Auth</td><td>List / create team members</td></tr>
+    <tr><td>PATCH</td><td><code>/api/users/:id</code></td><td>Auth</td><td>Update team member</td></tr>
+    <tr><td>GET · PUT</td><td><code>/api/attendance/policy</code></td><td>Attendance</td><td>Read / save policy</td></tr>
+    <tr><td>GET · POST</td><td><code>/api/attendance/employees</code></td><td>Attendance</td><td>List / create employees</td></tr>
+    <tr><td>GET · PATCH</td><td><code>/api/attendance/employees/:id</code></td><td>Attendance</td><td>View / update employee</td></tr>
+    <tr><td>GET · POST</td><td><code>/api/attendance/gates</code></td><td>Attendance</td><td>List / create gates</td></tr>
+    <tr><td>GET · PATCH</td><td><code>/api/attendance/gates/:id</code></td><td>Attendance</td><td>View / update gate</td></tr>
+    <tr><td>GET</td><td><code>/api/attendance/presence</code></td><td>Attendance</td><td>Who is inside now</td></tr>
+    <tr><td>GET</td><td><code>/api/attendance/logs</code></td><td>Attendance</td><td>Punch history</td></tr>
+    <tr><td>GET</td><td><code>/api/attendance/daily</code></td><td>Attendance</td><td>Daily report</td></tr>
+    <tr><td>GET</td><td><code>/api/attendance/stats</code></td><td>Attendance</td><td>Dashboard stats + 7-day trend</td></tr>
+    <tr><td>GET · PUT · DELETE</td><td><code>/api/recognition/employees/:id/faces</code></td><td>Recognition</td><td>Sample count / enroll / remove face</td></tr>
+    <tr><td>POST</td><td><code>/api/recognition/identify</code></td><td>Recognition</td><td>Identify a face at a gate</td></tr>
+    <tr><td>GET · PUT</td><td><code>/api/recognition/settings</code></td><td>Recognition</td><td>Threshold and liveness setting</td></tr>
+    <tr><td>GET</td><td><code>/api/alerts/unknown-faces</code></td><td>Alerts</td><td>List unknown-face alerts</td></tr>
+    <tr><td>GET · PATCH</td><td><code>/api/alerts/unknown-faces/:id</code></td><td>Alerts</td><td>View / review alert</td></tr>
+    <tr><td>GET</td><td><code>/api/alerts/unknown-faces/:id/snapshot</code></td><td>Alerts</td><td>Alert photo (JPEG)</td></tr>
+    <tr><td>GET · POST</td><td><code>/api/alerts/recipients</code></td><td>Alerts</td><td>List / add recipients</td></tr>
+    <tr><td>DELETE</td><td><code>/api/alerts/recipients/:id</code></td><td>Alerts</td><td>Remove recipient</td></tr>
+    <tr><td>GET</td><td><code>/api/alerts/notifications</code></td><td>Alerts</td><td>Notification log</td></tr>
+    <tr><td>GET</td><td><code>/api/alerts/audit-logs</code></td><td>Alerts</td><td>Audit log</td></tr>
+  </table></div>
+  <h3>Internal only (not reachable through the gateway)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Method</th><th>Path</th><th>Called by → on</th><th>Purpose</th></tr>
+    <tr><td>POST</td><td><code>/internal/punch</code></td><td>Recognition → Attendance</td><td>Record a check-in/out after a face match</td></tr>
+    <tr><td>PUT</td><td><code>/internal/employees/:id/face-enrolled</code></td><td>Recognition → Attendance</td><td>Set or clear the face_enrolled flag</td></tr>
+  </table></div>
+</section>
+
+<p class="muted">SmartGate · Supervisor: Sir Muhammad Irfan · Ali Ghulam Hussain (2K23/BLCS/10) · Awais Shakoor (2K23/BLCS/14)</p>
+</main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById("themeBtn");
+    try {
+      var saved = localStorage.getItem("sg-theme");
+      if (saved) root.setAttribute("data-theme", saved);
+    } catch (e) {}
+    btn.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme") ||
+        (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("sg-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>
