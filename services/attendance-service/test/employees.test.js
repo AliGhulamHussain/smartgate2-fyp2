@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readEmployee } = require("../utils");
+const { readEmployee } = require("../routes/employees");
 
 const is400 = (error) => error.status === 400;
 

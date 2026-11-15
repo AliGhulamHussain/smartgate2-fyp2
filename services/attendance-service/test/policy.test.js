@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readPolicy } = require("../utils");
+const { readPolicy } = require("../routes/policy");
 
 const validPolicy = {
   timezone: "Asia/Karachi",

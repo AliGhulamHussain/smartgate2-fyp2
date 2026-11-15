@@ -1,28 +1,107 @@
+// Employees: the people whose attendance is tracked.
+// Everyone in the organization can read; only admins can add or edit.
+// Employees are never deleted, only set to "inactive", because their
+// attendance history still points to them.
 const express = require("express");
 const { pool } = require("../db");
-const {
-  authenticate,
-  requireOrganization,
-  allowRoles,
-} = require("../middleware/auth");
+const { authenticate, allowRoles } = require("../auth");
 const {
   asyncHandler,
   fail,
-  validUuid,
-  readEmployee,
-  readQueryText,
+  checkBody,
+  readText,
   readPositiveInt,
-} = require("../utils");
+  readUuid,
+} = require("../helpers");
 
 const router = express.Router();
-
-router.use(authenticate, requireOrganization);
+router.use(authenticate);
 
 const COLUMNS = `id, organization_id, employee_code, full_name, email, phone,
                  department, designation, status, presence, face_enrolled,
                  created_at, updated_at`;
 
-// Turns a duplicate employee_code into a safe 409.
+// Text fields and their maximum length. The first two are required.
+const TEXT_FIELDS = {
+  employee_code: 50,
+  full_name: 100,
+  email: 150,
+  phone: 20,
+  department: 100,
+  designation: 100,
+};
+const REQUIRED = ["employee_code", "full_name"];
+
+// Checks an employee body. For updates (partial = true) every field is
+// optional and "status" may also be changed. "presence" and "face_enrolled"
+// are never accepted: punches and face enrollment set those.
+function readEmployee(body, { partial = false } = {}) {
+  const allowed = Object.keys(TEXT_FIELDS);
+  if (partial) allowed.push("status");
+
+  checkBody(body, allowed, { partial });
+
+  const employee = {};
+
+  for (const [field, max] of Object.entries(TEXT_FIELDS)) {
+    const required = REQUIRED.includes(field);
+
+    if (!(field in body)) {
+      if (required && !partial) fail(400, `${field} is required.`);
+      continue;
+    }
+
+    let value = body[field];
+
+    // Optional fields can be cleared with null.
+    if (value === null && !required) {
+      employee[field] = null;
+      continue;
+    }
+    if (typeof value !== "string") {
+      fail(400, `${field} must be a string.`);
+    }
+
+    value = value.trim();
+
+    if (value === "") {
+      if (required) fail(400, `${field} cannot be empty.`);
+      employee[field] = null;
+      continue;
+    }
+    if (value.length > max) {
+      fail(400, `${field} must be at most ${max} characters.`);
+    }
+
+    employee[field] = value;
+  }
+
+  if (employee.employee_code && !/^[A-Za-z0-9._-]+$/.test(employee.employee_code)) {
+    fail(400, "employee_code may contain only letters, digits, '.', '_' and '-'.");
+  }
+
+  if (employee.email) {
+    employee.email = employee.email.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(employee.email)) {
+      fail(400, "email must be a valid email address.");
+    }
+  }
+
+  if (employee.phone && !/^\+?[0-9][0-9 -]{5,18}$/.test(employee.phone)) {
+    fail(400, "phone must contain 6-20 digits, spaces or dashes, optionally starting with +.");
+  }
+
+  if ("status" in body) {
+    if (!["active", "inactive"].includes(body.status)) {
+      fail(400, "status must be active or inactive.");
+    }
+    employee.status = body.status;
+  }
+
+  return employee;
+}
+
+// PostgreSQL error 23505 means a UNIQUE rule was broken.
 function failOnDuplicate(error) {
   if (error.code === "23505") {
     fail(409, "An employee with this employee_code already exists.");
@@ -30,22 +109,16 @@ function failOnDuplicate(error) {
   throw error;
 }
 
-function readId(req) {
-  if (!validUuid(req.params.id)) {
-    fail(400, "Employee id must be a valid UUID.");
-  }
-  return req.params.id;
-}
-
+// GET /api/attendance/employees?search=&department=&status=&presence=&page=&limit=
 router.get(
   "/",
   asyncHandler(async (req, res) => {
     const page = readPositiveInt(req.query.page, "page", 1, 100000);
     const limit = readPositiveInt(req.query.limit, "limit", 20, 100);
-    const search = readQueryText(req.query.search, "search", 100);
-    const department = readQueryText(req.query.department, "department", 100);
-    const status = readQueryText(req.query.status, "status", 10);
-    const presence = readQueryText(req.query.presence, "presence", 10);
+    const search = readText(req.query.search, "search", 100);
+    const department = readText(req.query.department, "department", 100);
+    const status = readText(req.query.status, "status", 10);
+    const presence = readText(req.query.presence, "presence", 10);
 
     if (status && !["active", "inactive"].includes(status)) {
       fail(400, "status must be active or inactive.");
@@ -54,63 +127,56 @@ router.get(
       fail(400, "presence must be inside or outside.");
     }
 
-    // Every query starts with the caller's organization.
-    const conditions = ["organization_id = $1"];
+    // Build the WHERE part. It always starts with the caller's organization.
+    const where = ["organization_id = $1"];
     const values = [req.user.organization_id];
 
     if (search) {
-      // Escape LIKE wildcards so the search is literal.
+      // Escape % and _ so they are searched for literally.
       values.push(`%${search.replace(/[\\%_]/g, "\\$&")}%`);
-      conditions.push(
-        `(full_name ILIKE $${values.length} OR employee_code ILIKE $${values.length})`
-      );
+      where.push(`(full_name ILIKE $${values.length} OR employee_code ILIKE $${values.length})`);
     }
     if (department) {
       values.push(department);
-      conditions.push(`LOWER(department) = LOWER($${values.length})`);
+      where.push(`LOWER(department) = LOWER($${values.length})`);
     }
     if (status) {
       values.push(status);
-      conditions.push(`status = $${values.length}`);
+      where.push(`status = $${values.length}`);
     }
     if (presence) {
       values.push(presence);
-      conditions.push(`presence = $${values.length}`);
+      where.push(`presence = $${values.length}`);
     }
 
-    const where = conditions.join(" AND ");
+    const whereSql = where.join(" AND ");
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM attendance.employees WHERE ${where}`,
+    const count = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM attendance.employees WHERE ${whereSql}`,
       values
     );
 
-    const listResult = await pool.query(
+    const list = await pool.query(
       `SELECT ${COLUMNS}
        FROM attendance.employees
-       WHERE ${where}
+       WHERE ${whereSql}
        ORDER BY full_name, employee_code
        LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
       [...values, limit, (page - 1) * limit]
     );
 
-    res.json({
-      employees: listResult.rows,
-      page,
-      limit,
-      total: countResult.rows[0].total,
-    });
+    res.json({ employees: list.rows, page, limit, total: count.rows[0].total });
   })
 );
 
+// GET /api/attendance/employees/:id
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const id = readId(req);
+    const id = readUuid(req.params.id, "Employee id");
 
     const result = await pool.query(
-      `SELECT ${COLUMNS}
-       FROM attendance.employees
+      `SELECT ${COLUMNS} FROM attendance.employees
        WHERE id = $1 AND organization_id = $2`,
       [id, req.user.organization_id]
     );
@@ -123,6 +189,7 @@ router.get(
   })
 );
 
+// POST /api/attendance/employees (admins only)
 router.post(
   "/",
   allowRoles("org_admin"),
@@ -152,21 +219,23 @@ router.post(
   })
 );
 
+// PATCH /api/attendance/employees/:id (admins only). Only the sent fields change.
 router.patch(
   "/:id",
   allowRoles("org_admin"),
   asyncHandler(async (req, res) => {
-    const id = readId(req);
+    const id = readUuid(req.params.id, "Employee id");
     const changes = readEmployee(req.body, { partial: true });
 
-    // Column names come from readEmployee's fixed allow-list, never the client.
+    // e.g. "full_name = $3, email = $4". The column names come from
+    // readEmployee's fixed list, never straight from the client.
     const fields = Object.keys(changes);
-    const assignments = fields.map((field, index) => `${field} = $${index + 3}`);
+    const setSql = fields.map((field, i) => `${field} = $${i + 3}`).join(", ");
 
     const result = await pool
       .query(
         `UPDATE attendance.employees
-         SET ${assignments.join(", ")}, updated_at = NOW()
+         SET ${setSql}, updated_at = NOW()
          WHERE id = $1 AND organization_id = $2
          RETURNING ${COLUMNS}`,
         [id, req.user.organization_id, ...fields.map((field) => changes[field])]
@@ -181,4 +250,4 @@ router.patch(
   })
 );
 
-module.exports = router;
+module.exports = { router, readEmployee };

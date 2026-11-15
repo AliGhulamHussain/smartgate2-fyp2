@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readGate } = require("../utils");
+const { readGate } = require("../routes/gates");
 
 const is400 = (error) => error.status === 400;
 

@@ -1,11 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {
-  readPunch,
-  decideAction,
-  checkInStatus,
-  checkOutStatus,
-} = require("../utils");
+const { readPunch } = require("../routes/internal");
+const { decideAction, checkInStatus, checkOutStatus } = require("../rules");
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const EMP = "22222222-2222-4222-8222-222222222222";

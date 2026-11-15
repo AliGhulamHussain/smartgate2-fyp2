@@ -1,9 +1,11 @@
+// Attendance service: policy, employees, gates, check-in/check-out and reports.
 const path = require("path");
 
 require("dotenv").config({
   path: path.resolve(__dirname, "../../.env"),
 });
 
+// Stop early with a clear message if a setting is missing.
 for (const name of [
   "ATTENDANCE_DATABASE_URL",
   "AUTH_SERVICE_URL",
@@ -22,31 +24,19 @@ if (process.env.INTERNAL_SERVICE_KEY.length < 32) {
 const express = require("express");
 const cors = require("cors");
 const { pool, closeOpenSessions } = require("./db");
-const { asyncHandler } = require("./utils");
-const policyRoutes = require("./routes/policy");
-const employeeRoutes = require("./routes/employees");
-const gateRoutes = require("./routes/gates");
-const internalRoutes = require("./routes/internal");
-const monitoringRoutes = require("./routes/monitoring");
+const { asyncHandler } = require("./helpers");
 
 const app = express();
-
 app.disable("x-powered-by");
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_ORIGIN,
-    credentials: true,
-  })
-);
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN, credentials: true }));
 
+// Browsers may only call us from the SmartGate frontend.
 app.use((req, res, next) => {
   const origin = req.get("Origin");
-
   if (origin && origin !== process.env.FRONTEND_ORIGIN) {
     return res.status(403).json({ message: "Origin is not allowed." });
   }
-
   next();
 });
 
@@ -61,40 +51,32 @@ app.get(
   "/health",
   asyncHandler(async (req, res) => {
     await pool.query("SELECT 1");
-    res.json({
-      status: "ok",
-      service: "attendance-service",
-      database: "connected",
-    });
+    res.json({ status: "ok", service: "attendance-service", database: "connected" });
   })
 );
 
-app.use("/api/attendance/policy", policyRoutes);
-app.use("/api/attendance/employees", employeeRoutes);
-app.use("/api/attendance/gates", gateRoutes);
-// /presence, /logs, /daily and /stats
-app.use("/api/attendance", monitoringRoutes);
-
-// Service-to-service routes; the gateway must never expose these.
-app.use("/internal", internalRoutes);
+app.use("/api/attendance/policy", require("./routes/policy").router);
+app.use("/api/attendance/employees", require("./routes/employees").router);
+app.use("/api/attendance/gates", require("./routes/gates").router);
+app.use("/api/attendance", require("./routes/monitoring").router); // presence, logs, daily, stats
+app.use("/internal", require("./routes/internal").router); // only for other services
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });
 });
 
+// Errors thrown with fail() are sent to the client as they are. Anything
+// else is logged and answered with a plain 500, so no details leak.
 app.use((error, req, res, next) => {
   if (res.headersSent) {
     return next(error);
   }
-
   if (error.public) {
     return res.status(error.status).json({ message: error.message });
   }
-
   if (error.type === "entity.parse.failed") {
     return res.status(400).json({ message: "Invalid JSON body." });
   }
-
   if (error.type === "entity.too.large") {
     return res.status(413).json({ message: "Request body is too large." });
   }
@@ -104,7 +86,7 @@ app.use((error, req, res, next) => {
 });
 
 async function start() {
-  await pool.query("SELECT 1");
+  await pool.query("SELECT 1"); // fail fast if the database is down
 
   const port = Number(process.env.ATTENDANCE_PORT || 4002);
   const host = process.env.ATTENDANCE_HOST || "127.0.0.1";
@@ -113,7 +95,7 @@ async function start() {
     console.log(`Attendance service running at http://${host}:${port}`);
   });
 
-  // Close forgotten check-outs once auto_close_time passes.
+  // Every minute, check out people who forgot to check out (see db.js).
   const autoClose = setInterval(() => {
     closeOpenSessions(pool).catch((error) => {
       console.error("Auto-close failed:", error.code || error.message);

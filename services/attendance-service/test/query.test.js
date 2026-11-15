@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readDate, readChoice, readQueryUuid, readPositiveInt } = require("../utils");
+const { readDate, readChoice, readUuid, readPositiveInt } = require("../helpers");
 
 const is400 = (error) => error.status === 400;
 
@@ -14,11 +14,11 @@ test("readDate accepts real YYYY-MM-DD dates only", () => {
   assert.throws(() => readDate(["2026-11-13"], "d"), is400);
 });
 
-test("readChoice, readQueryUuid and readPositiveInt validate query values", () => {
+test("readChoice, readUuid and readPositiveInt validate query values", () => {
   assert.equal(readChoice("late", "s", ["late", "absent"]), "late");
   assert.throws(() => readChoice("gone", "s", ["late"]), is400);
   assert.throws(() => readChoice(["late"], "s", ["late"]), is400);
-  assert.throws(() => readQueryUuid("abc", "id"), is400);
+  assert.throws(() => readUuid("abc", "id"), is400);
   assert.equal(readPositiveInt(undefined, "p", 1, 10), 1);
   assert.throws(() => readPositiveInt("0", "p", 1, 10), is400);
   assert.throws(() => readPositiveInt("1.5", "p", 1, 10), is400);
