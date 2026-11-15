@@ -6,7 +6,9 @@ import { Button, ErrorNote, Modal, TONE_HEX, useToast } from "../ui";
 
 const SAMPLES = 5;
 
-// Captures 5 consistent face samples from the webcam and enrolls them.
+// Face enrollment dialog. The webcam takes 5 samples automatically; every
+// sample must be the same person as the first one. Only the 128 numbers per
+// sample are sent to the server, never the video.
 export default function EnrollFace({ employee, onClose, onSaved }) {
   const notify = useToast();
   const video = useRef(null);

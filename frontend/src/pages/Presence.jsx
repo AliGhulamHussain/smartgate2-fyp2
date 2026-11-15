@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { DoorOpen, Search } from "lucide-react";
 import { useApi } from "../api";
-import { Avatar, Empty, ErrorNote, Input, PageHeader, Panel, Skeleton, fmtTime, timeAgo } from "../ui";
+import { fmtTime, timeAgo } from "../format";
+import { Avatar, Empty, ErrorNote, Input, PageHeader, Panel, Skeleton } from "../ui";
 
+// Who is inside right now. Refreshes every 10 seconds; the search filters on screen.
 export default function Presence() {
   const { data, error, loading, reload } = useApi("/api/attendance/presence", { refreshMs: 10000 });
   const [search, setSearch] = useState("");

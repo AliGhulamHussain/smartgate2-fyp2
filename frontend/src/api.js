@@ -127,3 +127,32 @@ export function useApi(path, { refreshMs } = {}) {
 
   return { ...state, reload: load };
 }
+
+// For buttons that save something. `run(fn)` shows the spinner while fn
+// runs and keeps the error (if any) so the form can show it.
+// Returns true when fn finished without an error.
+//
+//   const { busy, error, run } = useAction();
+//   run(() => api("/api/...", { method: "POST", body }));
+export function useAction() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const run = useCallback(async (action) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      return true;
+    } catch (err) {
+      setError(err);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return { busy, error, run, clearError };
+}

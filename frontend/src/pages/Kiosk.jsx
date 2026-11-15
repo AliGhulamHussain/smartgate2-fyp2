@@ -1,6 +1,13 @@
-// Full-screen gate kiosk. All face processing runs in the browser with
-// @vladmandic/face-api; the Recognition Service receives a descriptor, the
-// blink result and (used only for unknown faces) a small snapshot.
+// Full-screen gate kiosk.
+//
+// How a scan works (see tick() below):
+//   1. Find a face in the camera picture, several times a second.
+//   2. Wait until the same person is seen in 3 frames in a row.
+//   3. Wait for a blink (a printed photo cannot blink).
+//   4. Send the averaged face numbers to the server, which answers who it is.
+//   5. Show the result card for a few seconds, then start again.
+// All face processing runs in the browser (face-api). The server only gets
+// the 128 numbers, the blink result and, for unknown faces, a small photo.
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, CheckCircle2, Clock3, DoorOpen, Eye, Hand, LogOut, Maximize, Minimize, ScanFace, ShieldAlert, UserRound, XCircle,
@@ -10,8 +17,13 @@ import { navigate } from "../router";
 import {
   averageDescriptor, detectFace, drawFaceFrame, eyeAspectRatio, faceDistance, faceSnapshot, loadFaceModels, startCamera, stopCamera,
 } from "../face";
-import { Empty, Logo, Panel, Skeleton, Spinner, TONE_HEX, cx, fmtMinutes, label } from "../ui";
+import { fmtMinutes, label } from "../format";
+import { Empty, Logo, Panel, Skeleton, Spinner, TONE_HEX, cx } from "../ui";
 
+// "both" -> "Entry and exit", "entry" -> "Entry only"
+const directionLabel = (direction) => (direction === "both" ? "Entry and exit" : `${label(direction)} only`);
+
+// #/kiosk shows the gate picker; #/kiosk/<gateId> starts scanning.
 export default function Kiosk({ gateId }) {
   return gateId ? <Scanner gateId={gateId} /> : <GatePicker />;
 }
@@ -37,7 +49,7 @@ function GatePicker() {
           <a key={gate.id} href={`#/kiosk/${gate.id}`} className="glass reveal group rounded-[28px] p-6 transition-transform duration-500 ease-out hover:-translate-y-1" style={{ "--i": i + 2 }}>
             <DoorOpen className="size-6 text-accent transition-transform duration-500 ease-out group-hover:scale-110" aria-hidden />
             <p className="mt-6 text-xl font-semibold tracking-tight">{gate.name}</p>
-            <p className="mt-1 text-sm text-fg-3">{gate.direction === "both" ? "Entry and exit" : `${label(gate.direction)} only`}</p>
+            <p className="mt-1 text-sm text-fg-3">{directionLabel(gate.direction)}</p>
           </a>
         ))}
       </div>
@@ -59,10 +71,13 @@ const PROMPTS = {
   checking: { icon: ScanFace, text: "Checking" },
 };
 
-const SAME_PERSON = 0.45;     // descriptor distance between consecutive frames
-const FRAMES_NEEDED = 3;      // consecutive frames before identifying
+const SAME_PERSON = 0.45;     // max face distance between two frames of the same person
+const FRAMES_NEEDED = 3;      // same person in this many frames in a row before identifying
 const RESULT_MS = 3800;       // how long a result stays on screen
 const IGNORE_SAME_MS = 9000;  // ignore the person just identified while they walk through
+const MIN_FACE_WIDTH = 0.14;  // face must fill this share of the picture width ("come closer")
+const EYES_CLOSED = 0.7;      // eye openness below 70% of this person's normal = eyes closed
+const EYES_OPEN = 0.85;       // back above 85% after closing = one blink
 
 function Scanner({ gateId }) {
   const video = useRef(null);
@@ -74,6 +89,7 @@ function Scanner({ gateId }) {
   const gate = useApi(`/api/attendance/gates/${gateId}`);
   const settings = useApi("/api/recognition/settings");
   const liveness = settings.data?.settings.liveness_required ?? true;
+  // The scan loop reads the latest setting through this ref.
   const livenessRef = useRef(liveness);
   livenessRef.current = liveness;
 
@@ -88,6 +104,14 @@ function Scanner({ gateId }) {
     let stopped = false;
     let timer;
     let resultTimer;
+    // Scan state, kept outside React so updating it does not re-render:
+    //   frames      face numbers from the last few frames of the current person
+    //   earOpen     how open this person's eyes normally are (eye aspect ratio)
+    //   eyesClosed  eyes are closed right now (halfway through a blink)
+    //   blinked     a full blink was seen
+    //   busy        waiting for the server's answer
+    //   pausedUntil short pause after a result
+    //   last        the person just identified, ignored while they walk away
     const s = { frames: [], earOpen: 0, eyesClosed: false, blinked: false, busy: false, pausedUntil: 0, last: null };
 
     const resetTrack = () => {
@@ -100,6 +124,7 @@ function Scanner({ gateId }) {
       if (!stopped) timer = setTimeout(tick, ms);
     };
 
+    // Step 4: ask the server who this is, then show the answer.
     async function identify(box) {
       s.busy = true;
       setStage("checking");
@@ -124,6 +149,7 @@ function Scanner({ gateId }) {
       resultTimer = setTimeout(() => setResult(null), RESULT_MS);
     }
 
+    // One pass of the scan loop. Each pass schedules the next one.
     async function tick() {
       if (stopped) return;
       const v = video.current;
@@ -139,7 +165,7 @@ function Scanner({ gateId }) {
         setStage("idle");
         return schedule(160);
       }
-      if (box.width < v.videoWidth * 0.14) {
+      if (box.width < v.videoWidth * MIN_FACE_WIDTH) {
         resetTrack();
         drawFaceFrame(overlay.current, v, box, "rgba(255,255,255,0.55)");
         setStage("closer");
@@ -152,17 +178,18 @@ function Scanner({ gateId }) {
         return schedule(200);
       }
 
-      // Consecutive frames must show the same person.
+      // Step 2: consecutive frames must show the same person, otherwise start over.
       const previous = s.frames[s.frames.length - 1];
       if (previous && faceDistance(previous, face.descriptor) > SAME_PERSON) resetTrack();
       s.frames.push(Array.from(face.descriptor));
       if (s.frames.length > 6) s.frames.shift();
 
-      // Blink: eye aspect ratio falls well below this person's open-eye level, then recovers.
+      // Step 3: blink check. The eye aspect ratio drops well below this person's
+      // normal open-eye level, then comes back up.
       const ear = eyeAspectRatio(face.landmarks);
-      s.earOpen = Math.max(ear, s.earOpen * 0.985);
-      if (ear < s.earOpen * 0.7) s.eyesClosed = true;
-      else if (s.eyesClosed && ear > s.earOpen * 0.85) {
+      s.earOpen = Math.max(ear, s.earOpen * 0.985); // slowly forget old values
+      if (ear < s.earOpen * EYES_CLOSED) s.eyesClosed = true;
+      else if (s.eyesClosed && ear > s.earOpen * EYES_OPEN) {
         s.eyesClosed = false;
         s.blinked = true;
       }
@@ -179,6 +206,7 @@ function Scanner({ gateId }) {
       schedule(80);
     }
 
+    // Start: load the face models, turn on the camera, begin scanning.
     (async () => {
       try {
         await loadFaceModels();
@@ -215,7 +243,7 @@ function Scanner({ gateId }) {
           <Logo className="size-10 rounded-full" />
           <div className="leading-tight">
             <p className="text-[15px] font-semibold">{gate.data?.gate.name ?? "Gate"}</p>
-            <p className="text-xs text-fg-3">{gate.data ? (gate.data.gate.direction === "both" ? "Entry and exit" : `${label(gate.data.gate.direction)} only`) : " "}</p>
+            <p className="text-xs text-fg-3">{gate.data ? directionLabel(gate.data.gate.direction) : " "}</p>
           </div>
         </div>
         <Clock />
@@ -277,6 +305,7 @@ function Clock() {
   );
 }
 
+// The result card: welcome, late, goodbye, already recorded or not recognized.
 function Outcome({ result }) {
   if (result.error) {
     return <ResultCard tone="bad" icon={XCircle} title="Could not check you in" subtitle={result.error} />;

@@ -1,15 +1,16 @@
 import { Suspense, lazy, useState } from "react";
 import { CheckCircle2, Pencil, Plus, ScanFace, Search, UserRoundX, Users } from "lucide-react";
-import { api, query, useApi } from "../api";
+import { api, query, useAction, useApi } from "../api";
 import { useAuth } from "../auth";
 import {
-  Avatar, Badge, Button, Empty, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Pagination, Panel, Select,
-  Skeleton, Table, useToast,
+  Avatar, Badge, Button, Empty, ErrorNote, Field, IconButton, Input, LoadingRows, Modal, PageHeader, Pagination, Panel,
+  Select, Table, useToast,
 } from "../ui";
 
 // face-api and TensorFlow.js are large; load them only when enrolling.
 const EnrollFace = lazy(() => import("./EnrollFace"));
 
+// Employee list with search and filters. Admins can add, edit and enroll faces.
 export default function Employees() {
   const { isAdmin } = useAuth();
   const [filters, setFilters] = useState({ search: "", status: "", presence: "" });
@@ -51,7 +52,7 @@ export default function Employees() {
 
       <Panel className="reveal p-4 sm:p-6" style={{ "--i": 1 }}>
         {loading ? (
-          <div className="space-y-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14" />)}</div>
+          <LoadingRows count={5} height="h-14" />
         ) : (
           <>
             <Table
@@ -122,47 +123,45 @@ export default function Employees() {
   );
 }
 
-const EMPTY = { employee_code: "", full_name: "", email: "", phone: "", department: "", designation: "" };
+const FIELDS = ["employee_code", "full_name", "email", "phone", "department", "designation"];
+const REQUIRED = ["employee_code", "full_name"];
 
+// Add an employee (employee = {}) or edit one.
 function EmployeeForm({ employee, onClose, onSaved }) {
   const notify = useToast();
   const isNew = !employee.id;
-  const [form, setForm] = useState(() => ({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, employee[k] ?? ""])) }));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const [form, setForm] = useState(() => Object.fromEntries(FIELDS.map((key) => [key, employee[key] ?? ""])));
+  const { busy, error, run } = useAction();
 
   const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
 
-  async function save(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    // Empty optional fields are sent as null so they are cleared.
-    const body = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim() === "" && !["employee_code", "full_name"].includes(k) ? null : v]));
-    try {
-      if (isNew) await api("/api/attendance/employees", { method: "POST", body });
-      else await api(`/api/attendance/employees/${employee.id}`, { method: "PATCH", body });
-      notify(isNew ? "Employee added" : "Changes saved");
+  // Saves, then tells the list to reload and closes the dialog.
+  async function send(body, message) {
+    const saved = await run(() =>
+      isNew
+        ? api("/api/attendance/employees", { method: "POST", body })
+        : api(`/api/attendance/employees/${employee.id}`, { method: "PATCH", body })
+    );
+    if (saved) {
+      notify(message);
       onSaved();
       onClose();
-    } catch (err) {
-      setError(err);
-      setBusy(false);
     }
   }
 
-  async function toggleStatus() {
-    setBusy(true);
-    try {
-      const status = employee.status === "active" ? "inactive" : "active";
-      await api(`/api/attendance/employees/${employee.id}`, { method: "PATCH", body: { status } });
-      notify(status === "active" ? "Employee reactivated" : "Employee deactivated");
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(err);
-      setBusy(false);
+  function save(event) {
+    event.preventDefault();
+    // Empty optional fields are sent as null, which clears them.
+    const body = {};
+    for (const [key, value] of Object.entries(form)) {
+      body[key] = value.trim() === "" && !REQUIRED.includes(key) ? null : value;
     }
+    send(body, isNew ? "Employee added" : "Changes saved");
+  }
+
+  function toggleStatus() {
+    const status = employee.status === "active" ? "inactive" : "active";
+    send({ status }, status === "active" ? "Employee reactivated" : "Employee deactivated");
   }
 
   return (

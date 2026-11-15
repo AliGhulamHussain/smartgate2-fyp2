@@ -1,10 +1,13 @@
+// The app shell: picks the screen from the URL (#/employees, #/kiosk/...)
+// and shows only the screens the user's role may open.
 import { Suspense, lazy, useEffect, useState } from "react";
 import {
   Bell, CalendarCheck, DoorOpen, LayoutGrid, LogOut, Menu, ScanFace, Settings as SettingsIcon, Users, X, Radio,
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { navigate, useRoute } from "./router";
-import { Avatar, ErrorBoundary, Logo, Spinner, cx, label } from "./ui";
+import { label } from "./format";
+import { Avatar, ErrorBoundary, Logo, Spinner, cx } from "./ui";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Presence from "./pages/Presence";
@@ -26,73 +29,59 @@ const NAV = [
   { id: "settings", label: "Settings", icon: SettingsIcon, page: Settings },
 ];
 
-function Background() {
+const fullScreenSpinner = (
+  <div className="relative z-10 grid min-h-dvh place-items-center">
+    <Spinner className="size-6" />
+  </div>
+);
+
+export default function App() {
   return (
     <>
-      <div className="ambient" aria-hidden>
-        <i />
-      </div>
+      <div className="ambient" aria-hidden />
+      <Screen />
     </>
   );
 }
 
-export default function App() {
+function Screen() {
   const { status, can } = useAuth();
   const [screen, ...rest] = useRoute();
 
-  if (status === "loading") {
-    return (
-      <>
-        <Background />
-        <div className="relative z-10 grid min-h-dvh place-items-center">
-          <Spinner className="size-6" />
-        </div>
-      </>
-    );
-  }
+  // Still checking the refresh cookie after a page reload.
+  if (status === "loading") return fullScreenSpinner;
 
-  if (status === "out") {
-    return (
-      <>
-        <Background />
-        <Login />
-      </>
-    );
-  }
+  if (status === "out") return <Login />;
 
-  // The kiosk runs full screen without the dashboard chrome.
+  // The kiosk runs full screen without the dashboard menu.
   if (screen === "kiosk" && can("kiosk")) {
     return (
-      <>
-        <Background />
-        <ErrorBoundary>
-          <Suspense fallback={<div className="relative z-10 grid min-h-dvh place-items-center"><Spinner className="size-6" /></div>}>
-            <Kiosk gateId={rest[0]} />
-          </Suspense>
-        </ErrorBoundary>
-      </>
+      <ErrorBoundary>
+        <Suspense fallback={fullScreenSpinner}>
+          <Kiosk gateId={rest[0]} />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
+  // Unknown or forbidden screens fall back to the first allowed one.
   const allowed = NAV.filter((item) => can(item.id));
   const active = allowed.find((item) => item.id === screen) ?? allowed[0];
   const Page = active.page;
 
   return (
-    <>
-      <Background />
-      <main className="relative z-10 w-full max-w-full overflow-x-hidden">
-        <TopNav items={allowed} active={active.id} />
-        <div className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-28 sm:px-6 lg:px-10">
-          <ErrorBoundary key={active.id}>
-            <Page />
-          </ErrorBoundary>
-        </div>
-      </main>
-    </>
+    <main className="relative z-10 w-full max-w-full overflow-x-hidden">
+      <TopNav items={allowed} active={active.id} />
+      <div className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-28 sm:px-6 lg:px-10">
+        <ErrorBoundary key={active.id}>
+          <Page />
+        </ErrorBoundary>
+      </div>
+    </main>
   );
 }
 
+// The floating top bar. On phones the links move into a drop-down menu.
 function TopNav({ items, active }) {
   const { user, logout, can } = useAuth();
   const [open, setOpen] = useState(false);

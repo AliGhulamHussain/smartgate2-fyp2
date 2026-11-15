@@ -1,7 +1,10 @@
-// Shared UI primitives for the liquid-glass design system.
+// Shared building blocks used by every screen: buttons, fields, badges,
+// tables, dialogs, toasts. The look comes from the tokens in index.css.
 import { Component, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
+import { label } from "./format";
 
+// Joins class names and skips empty ones: cx("a", false && "b", "c") -> "a c"
 export const cx = (...classes) => classes.filter(Boolean).join(" ");
 
 // Chart colors mirror the CSS tokens (SVG attributes cannot read CSS vars).
@@ -31,9 +34,6 @@ export const STATUS_TONE = {
   inside: "info", check_out: "info",
   outside: "idle", normal: "idle", weekend: "idle", holiday: "idle", dismissed: "idle",
 };
-
-export const label = (value) =>
-  String(value ?? "").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 // The SmartGate mark (frontend/public/SmartGate-logo.png, served as a
 // square 256px copy). Decorative by default; pass alt when it stands alone.
@@ -206,6 +206,15 @@ export function Spinner({ className }) {
 
 export function Skeleton({ className }) {
   return <div className={cx("animate-pulse rounded-2xl bg-white/[0.05]", className)} aria-hidden />;
+}
+
+// Grey placeholder rows shown while a table loads.
+export function LoadingRows({ count = 3, height = "h-12" }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: count }, (_, i) => <Skeleton key={i} className={height} />)}
+    </div>
+  );
 }
 
 export function Empty({ icon: Icon, title, children, action }) {
@@ -417,30 +426,7 @@ export function ToastProvider({ children }) {
   );
 }
 
+// Usage: const notify = useToast(); notify("Saved"); notify("Failed", "bad");
 export function useToast() {
   return useContext(ToastContext);
 }
-
-/* Formatting */
-export const fmtTime = (value) =>
-  value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
-
-export const fmtDateTime = (value) =>
-  value
-    ? new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-    : "—";
-
-export const fmtMinutes = (minutes) => {
-  if (!minutes) return "—";
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
-};
-
-export const timeAgo = (value) => {
-  const seconds = Math.max(0, (Date.now() - new Date(value).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
-  return fmtDateTime(value);
-};

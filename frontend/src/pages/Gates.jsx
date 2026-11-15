@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, DoorClosed, Pencil, Plus, ScanFace } from "lucide-react";
-import { api, useApi } from "../api";
+import { api, useAction, useApi } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Empty, ErrorNote, Field, Input, Modal, PageHeader, Panel, Segmented, Skeleton, cx, useToast } from "../ui";
 
@@ -10,6 +10,7 @@ const DIRECTION = {
   both: { label: "Entry and exit", icon: ArrowLeftRight, help: "Checks people in or out depending on whether they are inside." },
 };
 
+// Gate cards. Admins can add and edit gates; operators can open the kiosk.
 export default function Gates() {
   const { isAdmin, can } = useAuth();
   const { data, error, loading, reload } = useApi("/api/attendance/gates");
@@ -71,26 +72,25 @@ export default function Gates() {
   );
 }
 
+// Add a gate (gate = {}) or edit one.
 function GateForm({ gate, onClose, onSaved }) {
   const notify = useToast();
   const isNew = !gate.id;
   const [name, setName] = useState(gate.name ?? "");
   const [direction, setDirection] = useState(gate.direction ?? "both");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, run } = useAction();
 
-  async function run(body, message) {
-    setBusy(true);
-    setError(null);
-    try {
-      if (isNew) await api("/api/attendance/gates", { method: "POST", body });
-      else await api(`/api/attendance/gates/${gate.id}`, { method: "PATCH", body });
+  // Saves, then tells the list to reload and closes the dialog.
+  async function send(body, message) {
+    const saved = await run(() =>
+      isNew
+        ? api("/api/attendance/gates", { method: "POST", body })
+        : api(`/api/attendance/gates/${gate.id}`, { method: "PATCH", body })
+    );
+    if (saved) {
       notify(message);
       onSaved();
       onClose();
-    } catch (err) {
-      setError(err);
-      setBusy(false);
     }
   }
 
@@ -107,7 +107,7 @@ function GateForm({ gate, onClose, onSaved }) {
               className="mr-auto"
               disabled={busy}
               onClick={() =>
-                run({ status: gate.status === "active" ? "inactive" : "active" }, gate.status === "active" ? "Gate deactivated" : "Gate reactivated")
+                send({ status: gate.status === "active" ? "inactive" : "active" }, gate.status === "active" ? "Gate deactivated" : "Gate reactivated")
               }
             >
               {gate.status === "active" ? "Deactivate" : "Reactivate"}
@@ -123,7 +123,7 @@ function GateForm({ gate, onClose, onSaved }) {
         className="flex flex-col gap-5"
         onSubmit={(e) => {
           e.preventDefault();
-          run({ name, direction }, isNew ? "Gate added" : "Changes saved");
+          send({ name, direction }, isNew ? "Gate added" : "Changes saved");
         }}
       >
         <Field label="Name">{(id) => <Input id={id} required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Main entrance" />}</Field>

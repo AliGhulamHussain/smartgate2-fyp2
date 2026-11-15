@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import { Check, Inbox, Mail, RotateCcw, ScrollText, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
-import { api, query, useApi } from "../api";
+import { api, query, useAction, useApi } from "../api";
 import { useAuth } from "../auth";
+import { fmtDateTime, label, timeAgo } from "../format";
 import Snapshot from "../snapshot";
 import {
-  Badge, Button, Empty, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Pagination, Panel, Segmented, Skeleton,
-  Table, Textarea, cx, fmtDateTime, label, timeAgo, useToast,
+  Badge, Button, Empty, ErrorNote, Field, IconButton, Input, LoadingRows, Modal, PageHeader, Pagination, Panel,
+  Segmented, Skeleton, Table, Textarea, cx, useToast,
 } from "../ui";
 
+// Alerts page. Everyone who can open it sees unknown faces; admins also get
+// the recipients, notifications and audit log tabs.
 export default function Alerts() {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState("faces");
@@ -38,6 +41,7 @@ export default function Alerts() {
   );
 }
 
+// Grid of unknown-face photos, filtered by status. Refreshes every 20 seconds.
 function UnknownFaces() {
   const { user } = useAuth();
   const canReview = user.role === "org_admin" || user.role === "manager";
@@ -108,6 +112,7 @@ function UnknownFaces() {
   );
 }
 
+// The photo of one unknown face, with buttons to review or dismiss it.
 function ReviewModal({ face, gate, canReview, onClose, onSaved }) {
   const notify = useToast();
   const [note, setNote] = useState(face.note ?? "");
@@ -175,27 +180,22 @@ function ReviewModal({ face, gate, canReview, onClose, onSaved }) {
 
 const ALERT_TYPES = ["unknown_face", "late_arrival", "forgot_checkout", "daily_summary"];
 
+// Email addresses that are told about alerts.
 function Recipients() {
   const notify = useToast();
   const { data, error, loading, reload } = useApi("/api/alerts/recipients");
   const [email, setEmail] = useState("");
   const [types, setTypes] = useState(["unknown_face"]);
-  const [busy, setBusy] = useState(false);
-  const [formError, setFormError] = useState(null);
+  const { busy, error: formError, run } = useAction();
 
   async function add(event) {
     event.preventDefault();
-    setBusy(true);
-    setFormError(null);
-    try {
-      await api("/api/alerts/recipients", { method: "POST", body: { email, alert_types: types } });
+    const body = { email, alert_types: types };
+    if (await run(() => api("/api/alerts/recipients", { method: "POST", body }))) {
       notify("Recipient added");
       setEmail("");
       reload();
-    } catch (err) {
-      setFormError(err);
     }
-    setBusy(false);
   }
 
   async function remove(id) {
@@ -244,7 +244,7 @@ function Recipients() {
       <Panel className="reveal p-4 sm:p-6" style={{ "--i": 1 }}>
         <ErrorNote error={error} onRetry={reload} />
         {loading ? (
-          <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+          <LoadingRows />
         ) : (
           <Table
             rows={data?.recipients ?? []}
@@ -270,6 +270,7 @@ function Recipients() {
   );
 }
 
+// Notifications waiting to be emailed (no email sender is set up yet).
 function Notifications() {
   const [page, setPage] = useState(1);
   const { data, error, loading, reload } = useApi(`/api/alerts/notifications${query({ page, limit: 25 })}`);
@@ -278,7 +279,7 @@ function Notifications() {
       <ErrorNote error={error} onRetry={reload} />
       <p className="mb-4 px-2 text-xs text-fg-3">Email delivery is not configured yet, so notifications stay queued here.</p>
       {loading ? (
-        <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+        <LoadingRows />
       ) : (
         <>
           <Table
@@ -298,6 +299,7 @@ function Notifications() {
   );
 }
 
+// Who reviewed which alert and who changed the recipients.
 function AuditLog() {
   const [page, setPage] = useState(1);
   const { data, error, loading, reload } = useApi(`/api/alerts/audit-logs${query({ page, limit: 25 })}`);
@@ -305,7 +307,7 @@ function AuditLog() {
     <Panel className="reveal p-4 sm:p-6">
       <ErrorNote error={error} onRetry={reload} />
       {loading ? (
-        <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+        <LoadingRows />
       ) : (
         <>
           <Table

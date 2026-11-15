@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Pencil, Save, UserPlus, Users } from "lucide-react";
-import { api, useApi } from "../api";
+import { api, useAction, useApi } from "../api";
 import { useAuth } from "../auth";
+import { fmtDateTime, label } from "../format";
 import {
-  Avatar, Badge, Button, Empty, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Panel, Segmented, Select,
-  Skeleton, Table, cx, fmtDateTime, label, useToast,
+  Avatar, Badge, Button, Empty, ErrorNote, Field, IconButton, Input, LoadingRows, Modal, PageHeader, Panel, Segmented,
+  Select, Skeleton, Table, cx, useToast,
 } from "../ui";
 
+// Settings has three tabs: attendance policy, recognition, team members.
 export default function Settings() {
   const [tab, setTab] = useState("policy");
   return (
@@ -36,15 +38,16 @@ export default function Settings() {
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const TIMEZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : ["Asia/Karachi", "UTC"];
-const hhmm = (t) => (t ? t.slice(0, 5) : "");
+const hhmm = (t) => (t ? t.slice(0, 5) : ""); // "09:00:00" -> "09:00"
 
+// Working hours, grace minutes, working days and timezone.
 function Policy() {
   const notify = useToast();
   const { data, error } = useApi("/api/attendance/policy");
   const [form, setForm] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [saveError, setSaveError] = useState(null);
+  const { busy, error: saveError, run } = useAction();
 
+  // Fill the form from the saved policy, or with defaults if there is none yet (404).
   useEffect(() => {
     if (data?.policy) {
       const p = data.policy;
@@ -68,25 +71,17 @@ function Policy() {
 
   async function save(event) {
     event.preventDefault();
-    setBusy(true);
-    setSaveError(null);
-    try {
-      await api("/api/attendance/policy", {
-        method: "PUT",
-        body: {
-          timezone: form.timezone,
-          work_start: form.work_start,
-          work_end: form.work_end,
-          grace_minutes: Number(form.grace_minutes),
-          working_days: form.working_days,
-          auto_close_time: form.auto_close_time,
-        },
-      });
+    const body = {
+      timezone: form.timezone,
+      work_start: form.work_start,
+      work_end: form.work_end,
+      grace_minutes: Number(form.grace_minutes),
+      working_days: form.working_days,
+      auto_close_time: form.auto_close_time,
+    };
+    if (await run(() => api("/api/attendance/policy", { method: "PUT", body }))) {
       notify("Attendance policy saved");
-    } catch (err) {
-      setSaveError(err);
     }
-    setBusy(false);
   }
 
   return (
@@ -145,12 +140,12 @@ function Policy() {
   );
 }
 
+// Match threshold slider and the blink switch.
 function Recognition() {
   const notify = useToast();
   const { data, error } = useApi("/api/recognition/settings");
   const [form, setForm] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [saveError, setSaveError] = useState(null);
+  const { busy, error: saveError, run } = useAction();
 
   useEffect(() => {
     if (data) setForm(data.settings);
@@ -159,18 +154,10 @@ function Recognition() {
   if (!form) return error ? <ErrorNote error={error} /> : <Skeleton className="h-72" />;
 
   async function save() {
-    setBusy(true);
-    setSaveError(null);
-    try {
-      await api("/api/recognition/settings", {
-        method: "PUT",
-        body: { match_threshold: Number(form.match_threshold), liveness_required: form.liveness_required },
-      });
+    const body = { match_threshold: Number(form.match_threshold), liveness_required: form.liveness_required };
+    if (await run(() => api("/api/recognition/settings", { method: "PUT", body }))) {
       notify("Recognition settings saved");
-    } catch (err) {
-      setSaveError(err);
     }
-    setBusy(false);
   }
 
   const threshold = Number(form.match_threshold);
@@ -229,6 +216,7 @@ function Recognition() {
 
 const ROLES = ["manager", "gate_operator", "viewer"];
 
+// People who can sign in to the dashboard.
 function Team() {
   const { user: me } = useAuth();
   const { data, error, loading, reload } = useApi("/api/users?limit=100");
@@ -242,7 +230,7 @@ function Team() {
       </div>
       <ErrorNote error={error} onRetry={reload} />
       {loading ? (
-        <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+        <LoadingRows />
       ) : (
         <Table
           rows={data?.users ?? []}
@@ -278,6 +266,7 @@ function Team() {
   );
 }
 
+// Add a member (member = {}) or edit one.
 function MemberForm({ member, onClose, onSaved }) {
   const notify = useToast();
   const isNew = !member.id;
@@ -288,22 +277,19 @@ function MemberForm({ member, onClose, onSaved }) {
     department: member.department ?? "",
     password: "",
   });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const { busy, error, run } = useAction();
   const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
 
   async function send(body, message) {
-    setBusy(true);
-    setError(null);
-    try {
-      if (isNew) await api("/api/users", { method: "POST", body });
-      else await api(`/api/users/${member.id}`, { method: "PATCH", body });
+    const saved = await run(() =>
+      isNew
+        ? api("/api/users", { method: "POST", body })
+        : api(`/api/users/${member.id}`, { method: "PATCH", body })
+    );
+    if (saved) {
       notify(message);
       onSaved();
       onClose();
-    } catch (err) {
-      setError(err);
-      setBusy(false);
     }
   }
 

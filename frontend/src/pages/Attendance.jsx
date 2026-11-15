@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { CalendarX2, History } from "lucide-react";
 import { query, useApi } from "../api";
+import { fmtDateTime, fmtMinutes, fmtTime, label } from "../format";
 import {
-  Avatar, Badge, Empty, ErrorNote, Field, Input, PageHeader, Pagination, Panel, Segmented, Select, Skeleton, Table,
-  fmtDateTime, fmtMinutes, fmtTime, label,
+  Avatar, Badge, Empty, ErrorNote, Field, Input, LoadingRows, PageHeader, Pagination, Panel, Segmented, Select, Table,
 } from "../ui";
 
+// Two tabs: the daily report and the raw gate history.
 export default function Attendance() {
   const [tab, setTab] = useState("daily");
   return (
@@ -32,6 +33,7 @@ export default function Attendance() {
 
 const DAY_STATUSES = ["present", "late", "absent", "incomplete", "weekend", "holiday"];
 
+// One row per employee for the chosen date, with a summary on the left.
 function Daily() {
   const [date, setDate] = useState("");
   const [status, setStatus] = useState("");
@@ -94,7 +96,7 @@ function Daily() {
 
         <Panel className="reveal p-4 sm:p-6" style={{ "--i": 1 }}>
           {loading ? (
-            <div className="space-y-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+            <LoadingRows count={5} />
           ) : (
             <>
               <Table
@@ -136,6 +138,7 @@ function Daily() {
   );
 }
 
+// Every check-in and check-out, newest first, with filters.
 function Logs() {
   const [filters, setFilters] = useState({ from: "", to: "", action: "", status: "" });
   const [page, setPage] = useState(1);
@@ -173,7 +176,7 @@ function Logs() {
 
       <Panel className="reveal p-4 sm:p-6" style={{ "--i": 1 }}>
         {loading ? (
-          <div className="space-y-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+          <LoadingRows count={5} />
         ) : (
           <>
             <Table

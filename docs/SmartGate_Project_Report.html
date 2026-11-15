@@ -644,7 +644,7 @@
     <li>Shows a result card: <em>Welcome</em>, <em>Late</em>, <em>Goodbye</em>, <em>Already recorded</em> or <em>Not recognised</em>.</li>
     <li>Ignores the person it just identified while they walk away.</li>
   </ul>
-  <p><strong>Other files:</strong> <code>api.js</code> (fetch wrapper with refresh-and-retry), <code>auth.jsx</code> (session state), <code>ui.jsx</code> (buttons, tables, modals, toasts), <code>index.css</code> (design tokens), <code>snapshot.jsx</code> (loads alert photos with the token).</p>
+  <p><strong>Other files:</strong> <code>api.js</code> (fetch wrapper with refresh-and-retry, <code>useApi</code> for loading data and <code>useAction</code> for save buttons), <code>auth.jsx</code> (session state), <code>ui.jsx</code> (buttons, tables, modals, toasts), <code>format.js</code> (how times and durations are shown), <code>index.css</code> (design tokens), <code>snapshot.jsx</code> (loads alert photos with the token).</p>
 </section>
 
 <!-- 13 -->
@@ -793,7 +793,7 @@
         ├── main.jsx, App.jsx  entry and layout
         ├── api.js, auth.jsx   API calls and session
         ├── face.js            face-api model loading
-        ├── router.js, ui.jsx, index.css, snapshot.jsx
+        ├── router.js, ui.jsx, format.js, index.css, snapshot.jsx
         └── pages/             Login, Overview, Presence, Attendance, Employees,
                                EnrollFace, Gates, Alerts, Settings, Kiosk</code></pre>
 </section>

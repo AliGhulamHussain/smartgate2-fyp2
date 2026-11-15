@@ -2,10 +2,10 @@ import { ArrowUpRight, Clock3, DoorOpen, LogIn, LogOut, ShieldAlert, UserCheck, 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { query, useApi } from "../api";
 import { useAuth } from "../auth";
+import { fmtTime, label, timeAgo } from "../format";
+import { navigate } from "../router";
 import Snapshot from "../snapshot";
-import {
-  Avatar, Badge, Button, Empty, ErrorNote, PageHeader, Panel, Skeleton, TONE_HEX, cx, fmtTime, label, timeAgo,
-} from "../ui";
+import { Avatar, Badge, Button, Empty, ErrorNote, PageHeader, Panel, Skeleton, TONE_HEX, cx } from "../ui";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -14,6 +14,8 @@ function greeting() {
   return "Good evening";
 }
 
+// The home page: today's numbers, a 7-day chart, who is inside, recent
+// check-ins and new unknown faces. Each part refreshes on its own timer.
 export default function Overview() {
   const { user, can } = useAuth();
   const stats = useApi("/api/attendance/stats", { refreshMs: 30000 });
@@ -24,6 +26,7 @@ export default function Overview() {
   const firstName = user.full_name.split(" ")[0];
   const today = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
 
+  // 409 = no attendance policy yet, so there is nothing to report.
   if (stats.error?.status === 409) {
     return (
       <>
@@ -32,7 +35,7 @@ export default function Overview() {
           <Empty
             icon={Clock3}
             title="Set your working hours first"
-            action={user.role === "org_admin" && <Button variant="primary" onClick={() => (window.location.hash = "/settings")}>Open settings</Button>}
+            action={user.role === "org_admin" && <Button variant="primary" onClick={() => navigate("/settings")}>Open settings</Button>}
           >
             SmartGate needs the attendance policy (timezone, start time, grace minutes and working days) before it can
             record or report attendance.

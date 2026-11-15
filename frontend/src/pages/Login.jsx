@@ -1,18 +1,20 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
+import { useAction } from "../api";
 import { useAuth } from "../auth";
 import { Button, ErrorNote, Field, Input, Logo, Panel, Segmented } from "../ui";
 
+// "Riverside University" -> "riverside-university"
 const slugify = (text) =>
   text.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 
+// Sign in, or register a new organization (its first admin).
 export default function Login() {
   const { login, signup } = useAuth();
   const [mode, setMode] = useState("signin");
   const [form, setForm] = useState({ email: "", password: "", full_name: "", organization_name: "", organization_slug: "" });
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(false); // stop auto-filling once the user edits it
+  const { busy, error, run, clearError } = useAction();
 
   const set = (key) => (event) => {
     const value = event.target.value;
@@ -23,17 +25,9 @@ export default function Login() {
     }));
   };
 
-  async function submit(event) {
+  function submit(event) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      if (mode === "signin") await login(form.email, form.password);
-      else await signup(form);
-    } catch (err) {
-      setError(err);
-      setBusy(false);
-    }
+    run(() => (mode === "signin" ? login(form.email, form.password) : signup(form)));
   }
 
   return (
@@ -65,7 +59,7 @@ export default function Login() {
             value={mode}
             onChange={(value) => {
               setMode(value);
-              setError(null);
+              clearError();
             }}
             options={[
               { value: "signin", label: "Sign in" },
