@@ -499,7 +499,7 @@
     <li><strong>User management:</strong> list, create and update users inside your own organisation only.</li>
     <li>Blocks inactive users and suspended organisations.</li>
   </ul>
-  <p><strong>Files:</strong> <code>routes/auth.js</code>, <code>routes/users.js</code>, <code>middleware/auth.js</code>, <code>db.js</code>, <code>utils.js</code>.</p>
+  <p><strong>Files:</strong> <code>routes/auth.js</code> (signup, login, refresh, logout, me), <code>routes/users.js</code> (team members), <code>sessions.js</code> (tokens, cookie and account checks), <code>auth.js</code> (checks the access token on each request), <code>helpers.js</code>, <code>db.js</code>.</p>
 </section>
 
 <!-- 9 -->
@@ -778,12 +778,13 @@
 │   ├── routes/api.js          route table → services
 │   └── middleware/auth.js     token check via Auth /me
 ├── services/
-│   ├── auth-service/          routes/auth.js, routes/users.js
+│   ├── auth-service/          server.js, db.js, auth.js, helpers.js, sessions.js,
+│   │                          routes/auth.js, routes/users.js
 │   ├── attendance-service/    server.js, db.js, auth.js, helpers.js, rules.js,
 │   │                          routes/policy, employees, gates, internal, monitoring + test/
 │   ├── recognition-service/   routes/faces, identify, settings, events.js + test/
 │   └── alerts-service/        consumer.js, routes/unknown-faces, recipients, history + test/
-│       (the other services also have server.js, db.js, utils.js, middleware/auth.js)
+│       (recognition and alerts also have server.js, db.js, utils.js, middleware/auth.js)
 └── frontend/
     ├── vite.config.js         dev server + /api proxy
     ├── scripts/copy-models.js copies face models to public/models
