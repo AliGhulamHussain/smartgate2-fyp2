@@ -478,7 +478,7 @@
     <li><strong>Errors.</strong> If a service can't be reached the gateway returns <code>502</code> with a clear message; unknown routes return <code>404</code>. Timeouts are 10–15 seconds.</li>
   </ol>
   <div class="note"><strong>Defence in depth</strong>The gateway's login check is a first filter. Each service still verifies the token again itself and checks the user's role and organisation, so a service is safe even if a request somehow bypasses the gateway.</div>
-  <p><strong>Files:</strong> <code>server.js</code> (setup, origin check, header stripping), <code>routes/api.js</code> (route table and proxies), <code>middleware/auth.js</code> (token check via Auth).</p>
+  <p><strong>Files:</strong> <code>server.js</code> (setup, origin check, header stripping), <code>routes.js</code> (the list of allowed routes and one <code>proxyTo()</code> function), <code>auth.js</code> (token check via Auth).</p>
 </section>
 
 <!-- 8 -->
@@ -775,8 +775,8 @@
 │   └── migrations/            001_gate_status.sql, 002_recognition_threshold.sql
 ├── gateway/
 │   ├── server.js              origin check, header stripping, startup
-│   ├── routes/api.js          route table → services
-│   └── middleware/auth.js     token check via Auth /me
+│   ├── routes.js              allowed routes → services
+│   └── auth.js                token check via Auth /me
 ├── services/
 │   ├── auth-service/          server.js, db.js, auth.js, helpers.js, sessions.js,
 │   │                          routes/auth.js, routes/users.js
