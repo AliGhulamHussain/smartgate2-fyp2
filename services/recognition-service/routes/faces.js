@@ -1,64 +1,46 @@
-// Face enrollment. Only descriptors (128 numbers) are stored, never images,
-// and raw descriptors are never returned by the API.
+// Face enrollment: saving and removing an employee's face samples.
+// Only the 128 numbers are stored, never a photo, and the numbers are
+// never sent back out by the API.
 const express = require("express");
 const { pool, transaction, loadSettings } = require("../db");
-const {
-  authenticate,
-  requireOrganization,
-  allowRoles,
-} = require("../middleware/auth");
-const {
-  asyncHandler,
-  fail,
-  validUuid,
-  readEnrollment,
-  toVector,
-  callAttendance,
-} = require("../utils");
+const { authenticate, allowRoles } = require("../auth");
+const { asyncHandler, fail, isUuid, isObject } = require("../helpers");
+const { readDescriptor, toVector } = require("../matching");
+const { getEmployee, setFaceEnrolled } = require("../attendance");
 
 const router = express.Router();
+router.use(authenticate);
 
-router.use(authenticate, requireOrganization);
+const MIN_SAMPLES = 3;
+const MAX_SAMPLES = 10;
+
+// Body: { descriptors: [[128 numbers], [128 numbers], ...] } with 3-10 samples.
+function readEnrollment(body) {
+  if (!isObject(body) || Object.keys(body).some((key) => key !== "descriptors")) {
+    fail(400, "Body must be { descriptors: [...] }.");
+  }
+
+  const { descriptors } = body;
+
+  if (
+    !Array.isArray(descriptors) ||
+    descriptors.length < MIN_SAMPLES ||
+    descriptors.length > MAX_SAMPLES
+  ) {
+    fail(400, `descriptors must contain ${MIN_SAMPLES} to ${MAX_SAMPLES} face samples.`);
+  }
+
+  return descriptors.map((d, i) => readDescriptor(d, `descriptors[${i}]`));
+}
 
 function readEmployeeId(req) {
-  if (!validUuid(req.params.id)) {
+  if (!isUuid(req.params.id)) {
     fail(400, "Employee id must be a valid UUID.");
   }
   return req.params.id;
 }
 
-// Recognition cannot read the Attendance schema, so it asks the Attendance
-// API as the current user. That also proves the employee is in their org.
-async function fetchEmployee(req, employeeId) {
-  const { status, data } = await callAttendance(
-    `/api/attendance/employees/${employeeId}`,
-    { authorization: req.get("Authorization") }
-  );
-
-  if (status === 404) fail(404, "Employee not found.");
-  if (status === 401 || status === 403) fail(status, data?.message || "Access denied.");
-  if (status !== 200 || !data?.employee) {
-    fail(502, "Attendance service returned an unexpected response.");
-  }
-
-  return data.employee;
-}
-
-async function setFaceEnrolled(organizationId, employeeId, faceEnrolled) {
-  const { status } = await callAttendance(
-    `/internal/employees/${employeeId}/face-enrolled`,
-    {
-      method: "PUT",
-      internal: true,
-      body: { organization_id: organizationId, face_enrolled: faceEnrolled },
-    }
-  );
-
-  if (status === 404) fail(404, "Employee not found.");
-  if (status !== 200) fail(502, "Could not update the employee's enrollment status.");
-}
-
-// GET /api/recognition/employees/:id/faces: how many samples are enrolled.
+// GET /api/recognition/employees/:id/faces: how many samples are saved.
 router.get(
   "/:id/faces",
   asyncHandler(async (req, res) => {
@@ -75,34 +57,36 @@ router.get(
   })
 );
 
-// PUT /api/recognition/employees/:id/faces: enroll 3-10 samples,
-// replacing any previous samples for this employee.
+// PUT /api/recognition/employees/:id/faces (admins only)
+// Saves 3-10 samples and replaces any old ones for this employee.
 router.put(
   "/:id/faces",
   allowRoles("org_admin"),
   asyncHandler(async (req, res) => {
     const employeeId = readEmployeeId(req);
-    const descriptors = readEnrollment(req.body).map(toVector);
+    const vectors = readEnrollment(req.body).map(toVector);
     const organizationId = req.user.organization_id;
 
-    const employee = await fetchEmployee(req, employeeId);
+    const employee = await getEmployee(req.get("Authorization"), employeeId);
 
     if (employee.status !== "active") {
       fail(409, "Only active employees can be enrolled.");
     }
 
-    // One person must not be enrolled as two employees (buddy punching).
+    // The same person must not be enrolled as two employees, otherwise one
+    // person could mark attendance for someone else ("buddy punching").
+    // <-> is pgvector's distance operator.
     const settings = await loadSettings(organizationId);
-    const duplicate = await pool.query(
+    const nearest = await pool.query(
       `SELECT MIN(f.embedding <-> s.v::vector) AS distance
        FROM unnest($2::text[]) AS s(v)
        JOIN recognition.face_embeddings f
          ON f.organization_id = $1 AND f.employee_id <> $3`,
-      [organizationId, descriptors, employeeId]
+      [organizationId, vectors, employeeId]
     );
 
-    const nearest = duplicate.rows[0].distance;
-    if (nearest !== null && nearest <= settings.match_threshold) {
+    const distance = nearest.rows[0].distance;
+    if (distance !== null && distance <= settings.match_threshold) {
       fail(409, "This face is already enrolled for another employee.");
     }
 
@@ -116,18 +100,19 @@ router.put(
       await client.query(
         `INSERT INTO recognition.face_embeddings (organization_id, employee_id, embedding)
          SELECT $1, $2, v::vector FROM unnest($3::text[]) AS v`,
-        [organizationId, employeeId, descriptors]
+        [organizationId, employeeId, vectors]
       );
 
-      // If Attendance cannot be updated, the samples are rolled back.
+      // Tell Attendance the employee now has a face. If that fails, the
+      // error rolls back the transaction, so the samples are not saved.
       await setFaceEnrolled(organizationId, employeeId, true);
     });
 
-    res.json({ employee_id: employeeId, samples: descriptors.length, face_enrolled: true });
+    res.json({ employee_id: employeeId, samples: vectors.length, face_enrolled: true });
   })
 );
 
-// DELETE /api/recognition/employees/:id/faces: remove all samples.
+// DELETE /api/recognition/employees/:id/faces (admins only): removes all samples.
 router.delete(
   "/:id/faces",
   allowRoles("org_admin"),
@@ -150,4 +135,4 @@ router.delete(
   })
 );
 
-module.exports = router;
+module.exports = { router, readEnrollment };

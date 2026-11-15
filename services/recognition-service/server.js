@@ -1,9 +1,11 @@
+// Recognition service: face enrollment, face matching and unknown-face events.
 const path = require("path");
 
 require("dotenv").config({
   path: path.resolve(__dirname, "../../.env"),
 });
 
+// Stop early with a clear message if a setting is missing.
 for (const name of [
   "RECOGNITION_DATABASE_URL",
   "AUTH_SERVICE_URL",
@@ -24,22 +26,15 @@ const express = require("express");
 const cors = require("cors");
 const { pool } = require("./db");
 const { connectRedis, closeRedis } = require("./events");
-const { asyncHandler } = require("./utils");
-const faceRoutes = require("./routes/faces");
-const identifyRoutes = require("./routes/identify");
-const settingsRoutes = require("./routes/settings");
+const { asyncHandler } = require("./helpers");
 
 const app = express();
 
 app.disable("x-powered-by");
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_ORIGIN,
-    credentials: true,
-  })
-);
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN, credentials: true }));
 
+// Browsers may only call us from the SmartGate frontend.
 app.use((req, res, next) => {
   const origin = req.get("Origin");
 
@@ -50,7 +45,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Enrollment descriptors and a 200 KB base64 snapshot fit in 512kb.
+// Big enough for 10 face samples or a 200 KB photo (base64).
 app.use(express.json({ limit: "512kb" }));
 
 app.use((req, res, next) => {
@@ -70,14 +65,16 @@ app.get(
   })
 );
 
-app.use("/api/recognition/employees", faceRoutes);
-app.use("/api/recognition/identify", identifyRoutes);
-app.use("/api/recognition/settings", settingsRoutes);
+app.use("/api/recognition/employees", require("./routes/faces").router);
+app.use("/api/recognition/identify", require("./routes/identify").router);
+app.use("/api/recognition/settings", require("./routes/settings").router);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });
 });
 
+// Errors thrown with fail() are sent to the client as they are. Anything
+// else is logged and answered with a plain 500, so no details leak.
 app.use((error, req, res, next) => {
   if (res.headersSent) {
     return next(error);
@@ -100,8 +97,8 @@ app.use((error, req, res, next) => {
 });
 
 async function start() {
-  await pool.query("SELECT 1");
-  connectRedis();
+  await pool.query("SELECT 1"); // fail fast if the database is down
+  connectRedis(); // in the background; we keep working if Redis is down
 
   const port = Number(process.env.RECOGNITION_PORT || 4003);
   const host = process.env.RECOGNITION_HOST || "127.0.0.1";

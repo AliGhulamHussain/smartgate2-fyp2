@@ -573,7 +573,7 @@
 
   <h3>Settings (org_admin)</h3>
   <p><code>match_threshold</code> between 0.2 and 0.8 (lower = stricter), and <code>liveness_required</code> on/off.</p>
-  <p><strong>Files:</strong> <code>routes/faces.js</code>, <code>routes/identify.js</code>, <code>routes/settings.js</code>, <code>events.js</code> (Redis stream producer), <code>test/recognition.test.js</code>.</p>
+  <p><strong>Files:</strong> <code>routes/faces.js</code> (enroll/delete), <code>routes/identify.js</code> (kiosk), <code>routes/settings.js</code>, <code>matching.js</code> (descriptors and the match decision), <code>attendance.js</code> (calls to the Attendance service), <code>events.js</code> (Redis stream producer), <code>auth.js</code>, <code>helpers.js</code>, <code>db.js</code>, <code>test/recognition.test.js</code>.</p>
 </section>
 
 <!-- 11 -->
@@ -782,9 +782,10 @@
 │   │                          routes/auth.js, routes/users.js
 │   ├── attendance-service/    server.js, db.js, auth.js, helpers.js, rules.js,
 │   │                          routes/policy, employees, gates, internal, monitoring + test/
-│   ├── recognition-service/   routes/faces, identify, settings, events.js + test/
+│   ├── recognition-service/   server.js, db.js, auth.js, helpers.js, matching.js,
+│   │                          attendance.js, events.js, routes/faces, identify, settings + test/
 │   └── alerts-service/        consumer.js, routes/unknown-faces, recipients, history + test/
-│       (recognition and alerts also have server.js, db.js, utils.js, middleware/auth.js)
+│       (alerts also has server.js, db.js, utils.js, middleware/auth.js)
 └── frontend/
     ├── vite.config.js         dev server + /api proxy
     ├── scripts/copy-models.js copies face models to public/models

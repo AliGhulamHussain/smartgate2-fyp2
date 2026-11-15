@@ -1,12 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {
-  readEnrollment,
-  readIdentify,
-  readSettings,
-  toVector,
-  decideMatch,
-} = require("../utils");
+const { readEnrollment } = require("../routes/faces");
+const { readIdentify } = require("../routes/identify");
+const { readSettings } = require("../routes/settings");
+const { toVector, decideMatch } = require("../matching");
 
 const GATE = "33333333-3333-4333-8333-333333333333";
 const sample = (value = 0.01) => Array(128).fill(value);
