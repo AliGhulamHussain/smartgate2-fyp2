@@ -67,7 +67,7 @@ const PROMPTS = {
   idle: { icon: UserRound, text: "Step in front of the camera" },
   closer: { icon: UserRound, text: "Come a little closer" },
   hold: { icon: Hand, text: "Hold still" },
-  blink: { icon: Eye, text: "Blink once" },
+  blink: { icon: Eye, text: "Blink slowly" },
   checking: { icon: ScanFace, text: "Checking" },
 };
 
@@ -76,8 +76,8 @@ const FRAMES_NEEDED = 3;      // same person in this many frames in a row before
 const RESULT_MS = 3800;       // how long a result stays on screen
 const IGNORE_SAME_MS = 9000;  // ignore the person just identified while they walk through
 const MIN_FACE_WIDTH = 0.14;  // face must fill this share of the picture width ("come closer")
-const EYES_CLOSED = 0.7;      // eye openness below 70% of this person's normal = eyes closed
-const EYES_OPEN = 0.85;       // back above 85% after closing = one blink
+const EYES_CLOSED = 0.8;      // eye openness below 80% of this person's normal = eyes closed
+const EYES_OPEN = 0.9;        // back above 90% after closing = one blink
 
 function Scanner({ gateId }) {
   const video = useRef(null);
@@ -155,7 +155,10 @@ function Scanner({ gateId }) {
       const v = video.current;
       if (s.busy || performance.now() < s.pausedUntil) return schedule(150);
 
-      const face = await detectFace(v, 320).catch(() => null);
+      // While waiting for the blink we already have the face numbers, so only
+      // the eyes are checked (much faster, so a quick blink is not missed).
+      const waitingForBlink = livenessRef.current && !s.blinked && s.frames.length >= FRAMES_NEEDED;
+      const face = await detectFace(v, 320, !waitingForBlink).catch(() => null);
       if (stopped) return;
       const box = face?.detection.box;
 
@@ -173,16 +176,20 @@ function Scanner({ gateId }) {
       }
 
       // The person who was just identified is walking through: leave them be.
-      if (s.last && performance.now() < s.last.until && faceDistance(s.last.descriptor, face.descriptor) < 0.5) {
+      if (face.descriptor && s.last && performance.now() < s.last.until && faceDistance(s.last.descriptor, face.descriptor) < 0.5) {
         drawFaceFrame(overlay.current, v, box, TONE_HEX.ok);
         return schedule(200);
       }
 
-      // Step 2: consecutive frames must show the same person, otherwise start over.
-      const previous = s.frames[s.frames.length - 1];
-      if (previous && faceDistance(previous, face.descriptor) > SAME_PERSON) resetTrack();
-      s.frames.push(Array.from(face.descriptor));
-      if (s.frames.length > 6) s.frames.shift();
+      // Step 2: consecutive frames must show the same person, otherwise start
+      // collecting again. The blink progress is kept: closing the eyes changes
+      // the face numbers a little, and that must not cancel the blink.
+      if (face.descriptor) {
+        const previous = s.frames[s.frames.length - 1];
+        if (previous && faceDistance(previous, face.descriptor) > SAME_PERSON) s.frames = [];
+        s.frames.push(Array.from(face.descriptor));
+        if (s.frames.length > 6) s.frames.shift();
+      }
 
       // Step 3: blink check. The eye aspect ratio drops well below this person's
       // normal open-eye level, then comes back up.
@@ -203,7 +210,7 @@ function Scanner({ gateId }) {
         return schedule(150);
       }
       setStage(steady ? "blink" : "hold");
-      schedule(80);
+      schedule(waitingForBlink ? 20 : 80);
     }
 
     // Start: load the face models, turn on the camera, begin scanning.

@@ -29,14 +29,16 @@ export function loadFaceModels() {
   return loading;
 }
 
-// One face with landmarks and descriptor, or undefined. face-api returns a
-// thenable task, not a Promise; `async` turns it into a real Promise so
-// callers can use .catch().
-export async function detectFace(video, inputSize = 320) {
-  return await faceapi
+// One face with landmarks (and the descriptor, unless withDescriptor is
+// false), or undefined. The descriptor is the slowest step, so the kiosk
+// skips it while it only watches for a blink. face-api returns a thenable
+// task, not a Promise; `async` turns it into a real Promise so callers can
+// use .catch().
+export async function detectFace(video, inputSize = 320, withDescriptor = true) {
+  const task = faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.5 }))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
+    .withFaceLandmarks();
+  return await (withDescriptor ? task.withFaceDescriptor() : task);
 }
 
 export const faceDistance = (a, b) => faceapi.euclideanDistance(a, b);
