@@ -1,6 +1,6 @@
 # SmartGate FYP-2 Project Status
 
-Last updated: 2026-11-13
+Last updated: 2026-11-17
 
 This is the living development handoff for SmartGate. Update it after every meaningful feature, schema change, API change, integration test, or newly discovered blocker.
 
@@ -59,7 +59,9 @@ Normal frontend traffic must go through the API Gateway. Internal service endpoi
 | Alerts Service | Implemented and live-tested | Unknown-face alerts with snapshots, recipients, queued notifications, audit log |
 | React frontend | Implemented and browser-tested | Dashboard, all management screens, face enrollment and gate kiosk |
 | Automated tests | Started | 18 Attendance, 6 Recognition and 5 Alerts unit tests plus live integration checks |
-| Documentation | In progress | This is the first repository status document |
+| Documentation | Done | `docs/SmartGate_Project_Report.html` (technical report), FYP-2 thesis and presentation (kept outside the repository) |
+| Real-webcam testing | Done for one organization | Real face enrolled and recognised; blink check tuned (see Verified Runtime Behavior) |
+| Startup script | Done | `start.bat` starts Docker, the database, all services and the frontend |
 
 ## Database Source of Truth
 
@@ -97,20 +99,13 @@ Use these actual table names rather than shortened names from older planning doc
 
 ## Current Local Data Snapshot
 
-Verified on 2026-11-10:
+Verified on 2026-11-15:
 
 | Data | Count |
 |---|---:|
-| Organizations | 3 |
-| Users | 4 |
-| Refresh-token records | 10 |
-| Active org-admin sessions | 1 |
-| Attendance policies | 0 |
-| Employees | 0 |
-| Gates | 0 |
-| Attendance logs | 0 |
-| Recognition records | 0 |
-| Alert records | 0 |
+| Organizations | 4 (SmartGate Demo, SmartGate Demo2, Isolation Test, HRA Tech Academy) |
+| Employees | 20, all in HRA Tech Academy (18 demo employees `HRA-001` to `HRA-018` plus two real ones) |
+| Enrolled faces | At least 1 real employee (5 samples) |
 
 These counts describe the local development volume and are not fixtures.
 
@@ -350,6 +345,18 @@ Frontend verified on 2026-11-13 in Microsoft Edge (Playwright, fake camera) agai
 - Bugs found and fixed during this check: face-api thenable without `.catch()`, a camera stream that could start after its screen closed, and the timezone select silently showing the wrong zone when the saved value (`UTC`) was missing from the browser list
 - Temporary organization and all its rows, snapshots and Redis entries removed; database returned to baseline
 
+Code simplification verified on 2026-11-15:
+
+- Every service and the frontend were restructured (flat layout, one `helpers.js` per service, input validation at the top of each route file, plain comments, shared `format.js` and `useAction` in the frontend)
+- API responses of every endpoint and the rendered HTML of every screen were recorded before and after and compared automatically: identical
+- A save-flow browser test filled in and saved every form and signed out and in again: 21/21 steps passed
+
+Real-webcam test on 2026-11-15 (HRA Tech Academy, one person):
+
+- Enrollment worked first time (5 samples) and the person was recognised immediately with the blink check off
+- With the blink check on, the kiosk often stayed on the blink prompt: each frame ran all three models (150-300 ms), longer than a blink, and the 70%/85% thresholds needed a deeper eye closure than a half-captured blink gives
+- Fix (commit `34fe65c`): while waiting for the blink the kiosk skips the descriptor model and checks only the eyes about every 20 ms; thresholds loosened to 80%/90%; a shift in the face numbers during a blink no longer resets blink progress; prompt changed to "Blink slowly". After this the person was recognised with the blink check on
+
 ## Known Gaps and Risks
 
 - There is no migration runner. `db/init.sql` only runs for a new PostgreSQL volume; existing volumes need each file in `db/migrations/` applied in order (each file is safe to re-run and documents its command).
@@ -365,27 +372,29 @@ Frontend verified on 2026-11-13 in Microsoft Edge (Playwright, fake camera) agai
 - Snapshots are kept forever on local disk (no retention cleanup); in Docker they need a volume.
 - Failed stream events are retried only when the Alerts Service restarts and are never dead-lettered.
 - Auth's signup rate limit is per process and in memory; integration runs that create many organizations must space themselves out or restart Auth.
-- The 0.5 threshold and 0.05 margin are starting values and must be tuned with real cameras during demo testing.
-- The kiosk and enrollment have not been exercised with a real face yet (headless testing uses a synthetic camera); blink thresholds (0.7/0.85 of the open-eye ratio) may need tuning on real hardware.
+- The 0.5 threshold, 0.05 margin and blink thresholds (0.8/0.9 of the open-eye ratio) have been tested with one real webcam and one person only; more people, cameras and lighting should be tried.
 - First face detection compiles GPU shaders (about 1 s with a GPU, 10-25 s in software rendering); the kiosk shows the starting state meanwhile.
 - Performance (2026-11-14, production build): sign-in and first load 2.8 s, page switches 56-134 ms, 60 fps idle and scrolling. Pages keep their last data and refresh it in the background; the cache is cleared on sign-in and sign-out. Glass blur was reduced and the full-screen grain layer removed to lighten rendering.
 - The main dashboard bundle is about 676 KB (Recharts and React); further splitting is possible if load time matters.
 - Holidays have no API yet; rows can only be added directly in the database.
 - `POST /internal/punch` uses one shared key; rotate it in `.env` for both Attendance and Recognition together.
-- Redis stream names and consumer behavior are not defined.
 - Gateway proxy dependencies emit a Node.js `util._extend` deprecation warning under Node 24.
-- Automated unit coverage covers policy and employee validation only; live integration checks are run manually and are not yet a committed test suite.
+- Unit tests (29) cover validation, attendance rules and the match decision; the live integration checks (254) are run manually and are not yet a committed test suite.
 - npm reported two moderate dependency advisories for the Attendance install; the audit endpoint was unavailable, so no forced dependency changes were applied.
 
 ## Immediate Next Task
 
-End-to-end testing with a real webcam and two organizations:
+Demo preparation:
 
-- Enroll real faces, tune `match_threshold`, margin and blink thresholds, and confirm check-in, late, check-out, cooldown and unknown-face alerts at a real kiosk
-- Repeat with a second organization to confirm isolation through the UI
-- Then: demo data script, architecture and sequence diagrams, API documentation, report and presentation
+- Enroll a few more real faces (team members, classmates) in HRA Tech Academy so the demo shows several people
+- Rehearse the demo: a known face checks in, an unknown face appears in Alerts and is reviewed
+- Optional: confirm isolation with a second organization through the UI, and add a README with screenshots for the public GitHub repository
 
 ## How to Run
+
+Quickest: double-click `start.bat` in the project root. It starts Docker Desktop if needed, starts PostgreSQL and Redis, waits for the database, opens one window per service plus the gateway and frontend, then opens the browser. To stop, close the six windows and run `docker compose down` (data is kept).
+
+By hand:
 
 ```
 docker compose up -d
@@ -419,8 +428,8 @@ Open `http://localhost:5173` (use `localhost`, not `127.0.0.1`, so the camera an
 7. Completed: Recognition Service and embedding registration/matching
 8. Completed: Unknown-face event flow and Alerts Service
 9. Completed: React dashboard and kiosk
-10. End-to-end multi-tenant testing
-11. Demo data, diagrams, API documentation, report and presentation
+10. Mostly done: real-webcam testing with one organization (blink check tuned); multi-organization isolation is covered by the API checks
+11. Completed: demo employees, diagrams, technical report, presentation and FYP-2 thesis
 
 ## Update Checklist
 
